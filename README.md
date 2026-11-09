@@ -48,7 +48,11 @@
    Sürüş detayında grafik, nabız bölgelerinde geçen süre ve saniye saniye ham veri (CSV).
 
 Admin'de yapılan her değişiklik (atama, ad düzeltme, plaka, ekran metni, giriş denemeleri) **Kayıtlar**'a önceki ve
-sonraki değeriyle yazılır; kayıtlar silinmez.
+sonraki değeriyle yazılır; kayıtlar silinmez. **Tüm loglar** (sidebar'ın sol altı) bileklikten gelen her ölçümü saniye
+saniye akıtır; **Dışa aktar** tüm nabız ve işlem kayıtlarını CSV olarak indirir. Veri büyükse 5.000'lik parçalar halinde
+çekilir, ilerleme marka yükleme çubuğunda görünür, iptal edilebilir.
+
+Canlı ekranda tam ekran: başlıktaki düğme ya da `F`. Tam ekranda imleç 3 sn hareketsiz kalınca gizlenir.
 
 ## Hızlı başlangıç
 
@@ -84,6 +88,7 @@ proje içinde olsalardı Next'in dosya izleyicisi her log satırında sayfayı y
 | `setup` | Bağımlılıklar + `.env.local` |
 | `check` / `build` | Tip + lint / üstüne üretim build |
 | `deploy [prod]` | Vercel önizleme ya da canlı dağıtım |
+| `db:reset` | Sürüşler, ölçümler ve kayıtlar silinir, filo yeniden tohumlanır (onay ister; aynı veritabanını kullanan canlı ortamı da etkiler) |
 | `doctor` | Node, pnpm, ortam değişkenleri, servis durumu |
 
 ## Mimari

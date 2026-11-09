@@ -207,6 +207,20 @@ cmd_clean() {
 }
 
 # ============================================================================
+#  VERİTABANI
+# ============================================================================
+cmd_db_reset() {
+  title "veritabanını sıfırla"
+  env_set MONGODB_URI || { info "MONGODB_URI yok (bellek modu): yeniden başlatmak sıfırlar"; cmd_restart; return; }
+  warn "$(env_get MONGODB_DB || true) veritabanındaki TÜM sürüşler, ölçümler ve kayıtlar silinecek."
+  warn "Aynı veritabanını kullanan canlı (Vercel) ortam da etkilenir."
+  confirm "Devam edilsin mi?" || { info "vazgeçildi"; return 0; }
+  node scripts/db-reset.mjs
+  # Sunucu tohumlama durumunu bellekte tutar; yeniden başlatınca filo hemen yeniden yazılır.
+  if is_running web; then stop_bg web; cmd_web; fi
+}
+
+# ============================================================================
 #  DAĞITIM
 # ============================================================================
 cmd_deploy() {
@@ -265,6 +279,7 @@ cmd_help() {
   row "check" "tip + lint"
   row "build" "check + üretim derlemesi"
   row "clean" "Next önbelleği ve çalışma loglarını siler (onay ister)"
+  row "db:reset" "sürüşler, ölçümler, kayıtlar silinir; filo yeniden tohumlanır (onay ister)"
 
   printf '\n%s\n' "${h}Dağıtım ve tanı${z}"
   row "setup" "bağımlılıklar + .env.local"
@@ -276,7 +291,7 @@ cmd_help() {
 # ============================================================================
 #  YÖNLENDİRME
 # ============================================================================
-COMMANDS=(up down restart web sim status logs open ingest:test desktop kiosk check build clean setup deploy doctor help)
+COMMANDS=(up down restart web sim status logs open ingest:test desktop kiosk check build clean db:reset setup deploy doctor help)
 command="${1:-help}"
 [ $# -gt 0 ] && shift
 case "$command" in
@@ -288,6 +303,7 @@ case "$command" in
   kiosk) cmd_kiosk "${1:-}" ;;
   deploy) cmd_deploy "${1:-}" ;;
   ingest:test) cmd_ingest_test "${1:-}" ;;
+  db:reset) cmd_db_reset ;;
   -h | --help) cmd_help ;;
   *)
     fail "bilinmeyen komut: $command"

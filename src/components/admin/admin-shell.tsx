@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowSquareOutIcon, DotsThreeOutlineIcon, SignOutIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, DotsThreeOutlineIcon, ListMagnifyingGlassIcon, SignOutIcon } from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -8,6 +8,7 @@ import { useState, type ReactNode } from "react";
 import { logout } from "@/app/admin/actions";
 import { AmgLogo, MercedesBenzLockup } from "@/components/brand/logos";
 import { cn } from "@/lib/cn";
+import { ExportButton } from "./export-dialog";
 import { isActive, NAV_GROUPS, NAV_ITEMS, type NavItem } from "./nav-config";
 
 interface AdminShellProps {
@@ -74,7 +75,12 @@ function Sidebar({ pathname, storage }: { pathname: string; storage: AdminShellP
         </Link>
       </nav>
 
-      <div className="border-t border-line px-6 py-5">
+      <div className="border-t border-line px-3 pt-3">
+        <SidebarLink item={{ href: "/admin/logs", label: "Tüm loglar", icon: ListMagnifyingGlassIcon, primary: false }} active={isActive("/admin/logs", pathname)} />
+        <ExportButton size="sm" className="mt-2 w-full" />
+      </div>
+
+      <div className="mt-3 border-t border-line px-6 py-5">
         <StorageBadge storage={storage} />
         <form action={logout} className="mt-4">
           <button type="submit" className="flex cursor-pointer items-center gap-2 text-sm text-muted transition-colors hover:text-fg">
@@ -122,7 +128,7 @@ function TabBar({ pathname }: { pathname: string }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const primary = NAV_ITEMS.filter((i) => i.primary);
   const secondary = NAV_ITEMS.filter((i) => !i.primary);
-  const secondaryActive = secondary.some((i) => isActive(i.href, pathname));
+  const secondaryActive = secondary.some((i) => isActive(i.href, pathname)) || isActive("/admin/logs", pathname);
 
   return (
     <div className="no-print fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
@@ -133,6 +139,9 @@ function TabBar({ pathname }: { pathname: string }) {
               <item.icon size={18} aria-hidden /> {item.label}
             </Link>
           ))}
+          <Link href="/admin/logs" role="menuitem" onClick={() => setMoreOpen(false)} className="flex h-11 items-center gap-3 rounded-sm px-3 text-sm hover:bg-line">
+            <ListMagnifyingGlassIcon size={18} aria-hidden /> Tüm loglar
+          </Link>
           <Link href="/" target="_blank" role="menuitem" onClick={() => setMoreOpen(false)} className="flex h-11 items-center gap-3 rounded-sm px-3 text-sm hover:bg-line">
             <ArrowSquareOutIcon size={18} aria-hidden /> Canlı ekranı aç
           </Link>

@@ -6,6 +6,7 @@ import type { HeartRateSample, LiveSnapshot, VehicleId } from "@/domain/types";
 import { AmgLogo, MercedesBenzLockup } from "@/components/brand/logos";
 import { cn } from "@/lib/cn";
 import { formatDate, formatTime } from "@/lib/format";
+import { FullscreenToggle } from "./fullscreen";
 import { TimingTower } from "./timing-tower";
 import { useLiveFeed, type FeedStatus } from "./use-live-feed";
 import { VehicleTile } from "./vehicle-tile";
@@ -28,6 +29,7 @@ export function LiveWall({ initial, initialHistory }: { initial: LiveSnapshot; i
           {snapshot.settings.subtitle && <p className="mt-1.5 text-sm text-muted">{snapshot.settings.subtitle}</p>}
         </div>
         <FeedIndicator status={status} />
+        <FullscreenToggle />
         <Clock />
       </header>
 

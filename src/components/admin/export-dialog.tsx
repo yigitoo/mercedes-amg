@@ -4,7 +4,7 @@ import { DownloadSimpleIcon, XIcon } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 
 import { AmgProgress } from "@/components/ui/amg-progress";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FormMessage } from "@/components/ui/form-message";
 import { CSV_BOM, csvRow, type CsvCell } from "@/lib/csv";
@@ -30,7 +30,7 @@ type Progress = { kind: ExportKind; done: number; total: number | null; batches:
  * birleştirilir: büyük veride tek istek zaman aşımına düşmez, ilerleme gösterilir, istenirse iptal edilir.
  * Bir parça başarısız olursa 3 kez yeniden denenir.
  */
-export function ExportDialog({ trigger }: { trigger: (open: () => void) => React.ReactNode }) {
+export function ExportButton({ variant = "secondary", size = "md", className }: Pick<ButtonProps, "variant" | "size" | "className">) {
   const [open, setOpen] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState<string>();
@@ -81,7 +81,10 @@ export function ExportDialog({ trigger }: { trigger: (open: () => void) => React
 
   return (
     <>
-      {trigger(() => setOpen(true))}
+      <Button variant={variant} size={size} className={className} onClick={() => setOpen(true)}>
+        <DownloadSimpleIcon size={16} aria-hidden />
+        Dışa aktar
+      </Button>
       <Dialog open={open} onClose={close} title="Tüm logları dışa aktar" description="CSV olarak indirilir (Excel ile açılır). Büyük veri parça parça çekilir.">
         <div className="grid gap-3">
           {EXPORTS.map(({ kind, title, description, file }) => {
