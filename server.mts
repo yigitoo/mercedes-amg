@@ -39,7 +39,9 @@ const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false, maxP
 const alive = new WeakSet<WebSocket>();
 
 server.on("upgrade", (req, socket, head) => {
-  const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+  // URL.parse hata fırlatmaz: bozuk istek hedefi (ör. `//[`) süreci düşürmesin.
+  const pathname = URL.parse(req.url ?? "/", "http://localhost")?.pathname;
+  if (pathname == null) return void socket.destroy();
   if (pathname !== WS_PATH) return; // HMR vb. Next'e kalır
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
 });
@@ -71,6 +73,7 @@ function startTicker() {
 function stopTicker() {
   clearInterval(timer);
   timer = undefined;
+  last = null; // ekran yokken veri eskir; sonraki ekrana eski görüntü gönderilmesin
 }
 
 /**

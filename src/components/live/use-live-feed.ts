@@ -82,6 +82,7 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
   // Araç başına son görülen durum: biniş/iniş farkı ve bitiş özeti buradan çıkarılır.
   const knownRef = useRef(new Map(initial.vehicles.map((v) => [v.id, v])));
   const sampleTimesRef = useRef<number[]>([]);
+  const latestGeneratedAtRef = useRef(initial.generatedAt);
   const [samplesPerMinute, setSamplesPerMinute] = useState(0);
   const [tick, setTick] = useState(0);
 
@@ -90,6 +91,10 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
 
     const onSnapshot = (next: LiveSnapshot) => {
       lastMessageAt.current = Date.now();
+      // Sayfanın ilk görüntüsünden ya da son gelenden eski snapshot (yeniden bağlanma, sunucu önbelleği) geri sarmasın:
+      // eski sürücü "yeniden binmiş" gibi sahte iniş/biniş üretirdi.
+      if (next.generatedAt < latestGeneratedAtRef.current) return;
+      latestGeneratedAtRef.current = next.generatedAt;
       const now = Date.now();
       setSnapshot(next);
       setTick((t) => t + 1);
