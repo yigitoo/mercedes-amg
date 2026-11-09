@@ -3,11 +3,14 @@
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 
 import { REDLINE_BPM } from "@/domain/heart-rate";
-import type { LiveVehicle } from "@/domain/types";
+import type { LiveVehicle, VehicleId } from "@/domain/types";
 import { Segmented } from "@/components/ui/segmented";
 import { cn } from "@/lib/cn";
 import { shortName } from "@/lib/format";
 import { useStoredState } from "@/lib/use-stored-state";
+
+/** Vurgunun yükselen araca geçmesi için gereken en küçük artış (bpm/sn); gürültüde titremesin. */
+const RISE_THRESHOLD = 2;
 
 type SortMode = "slot" | "bpm";
 const SORT_MODES: readonly SortMode[] = ["slot", "bpm"];
@@ -19,16 +22,18 @@ const SORT_OPTIONS = [
 /**
  * Yayın tarzı sıralama kulesi. İki görünüm, ekranda seçilir ve o ekranda hatırlanır:
  *   Araç no  8 aracın tamamı sabit sırada; satırlar yer değiştirmez.
- *   Nabız    canlı araçlar nabza göre; sıra değişince satırlar kayar, lider AMG kırmızısı.
- * Kutudaki numara her iki görünümde de aracın numarasıdır.
+ *   Nabız    canlı araçlar nabza göre; sıra değişince satırlar kayar.
+ *
+ * Kırmızı vurgu "en yüksek nabız"a değil, o an nabzı YÜKSELEN araca gider ve araçlar arasında gezer.
+ * Amaç yüksek nabzı ödüllendirmek değil, değişimi göstermek (etkinlik ekibinin isteği).
  */
-export function TimingTower({ vehicles }: { vehicles: LiveVehicle[] }) {
+export function TimingTower({ vehicles, history }: { vehicles: LiveVehicle[]; history: Record<VehicleId, number[]> }) {
   const reduceMotion = useReducedMotion();
   const [mode, setMode] = useStoredState<SortMode>("amg.tower.sort", "slot", SORT_MODES);
 
   const live = vehicles.filter((v) => v.status === "live" && v.bpm != null);
   const rows = mode === "bpm" ? [...live].sort((a, b) => b.bpm! - a.bpm! || a.slot - b.slot) : [...vehicles].sort((a, b) => a.slot - b.slot);
-  const leaderId = [...live].sort((a, b) => b.bpm! - a.bpm!)[0]?.id;
+  const risingId = mostRising(live, history);
   const waiting = mode === "bpm" ? vehicles.filter((v) => !live.includes(v)) : [];
 
   return (
@@ -55,7 +60,7 @@ export function TimingTower({ vehicles }: { vehicles: LiveVehicle[] }) {
               <span
                 className={cn(
                   "grid h-7 -skew-x-[14deg] place-items-center font-title text-sm font-extrabold tabular",
-                  vehicle.id === leaderId ? "bg-amg text-white" : "bg-raised text-soft",
+                  vehicle.id === risingId ? "bg-amg text-white" : "bg-raised text-soft",
                 )}
               >
                 <span className="skew-x-[14deg]">{String(vehicle.slot).padStart(2, "0")}</span>
@@ -94,4 +99,15 @@ function TowerValue({ vehicle }: { vehicle: LiveVehicle }) {
       {vehicle.bpm}
     </span>
   );
+}
+
+/** Son ölçümde nabzı en çok artan canlı araç (eşiğin altındaki artışlar sayılmaz). */
+function mostRising(live: LiveVehicle[], history: Record<VehicleId, number[]>): VehicleId | undefined {
+  let best: { id: VehicleId; rise: number } | undefined;
+  for (const vehicle of live) {
+    const points = history[vehicle.id] ?? [];
+    const rise = points.length >= 2 ? points.at(-1)! - points.at(-2)! : 0;
+    if (rise >= RISE_THRESHOLD && (!best || rise > best.rise)) best = { id: vehicle.id, rise };
+  }
+  return best?.id;
 }

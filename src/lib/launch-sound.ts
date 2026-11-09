@@ -43,9 +43,22 @@ export async function playLaunchSound(durationMs: number): Promise<boolean> {
     return false;
   }
 
-  const t0 = ctx.currentTime + 0.06;
+  const total = scheduleLaunchSound(ctx, ctx.currentTime + 0.06, durationMs);
+  setTimeout(() => void ctx.close(), (total + 2.5) * 1000);
+  return true;
+}
+
+/** Geçiş ve uzaklaşma süresi (saniye), 0→100'den sonra. */
+export const LAUNCH_PASS_SECONDS = 1.5;
+
+/**
+ * Sesi verilen bağlama kurar ve toplam süresini (sn) döner. Canlı (AudioContext) ve çevrimdışı
+ * (OfflineAudioContext: video için WAV üretimi, scripts/render-launch-sound.mts) aynı fonksiyonu kullanır;
+ * böylece videodaki ses uygulamadakiyle birebir aynıdır.
+ */
+export function scheduleLaunchSound(ctx: BaseAudioContext, t0: number, durationMs: number): number {
   const T = durationMs / 1000;
-  const PASS = 1.5; // geçiş ve uzaklaşma süresi
+  const PASS = LAUNCH_PASS_SECONDS;
   const speed = speedCurve(96); // 0..1, görseldeki dolumla aynı eğri
   const out = createOutput(ctx);
 
@@ -53,14 +66,12 @@ export async function playLaunchSound(durationMs: number): Promise<boolean> {
   motorWhine(ctx, out, t0, T, PASS, speed);
   powerTone(ctx, out, t0, T, PASS, speed);
   roadAndWind(ctx, out, t0, T, PASS, speed);
-
-  setTimeout(() => void ctx.close(), (T + PASS + 2.5) * 1000);
-  return true;
+  return T + PASS;
 }
 
 // ── Çıkış zinciri: kompresör + kuru/yankılı karışım ──────────────────────────
 
-function createOutput(ctx: AudioContext): AudioNode {
+function createOutput(ctx: BaseAudioContext): AudioNode {
   const input = ctx.createGain();
   const compressor = ctx.createDynamicsCompressor();
   compressor.threshold.value = -16;
@@ -82,7 +93,7 @@ function createOutput(ctx: AudioContext): AudioNode {
 }
 
 /** Sentetik oda yankısı: üstel sönen stereo gürültü. */
-function impulseResponse(ctx: AudioContext, seconds: number, decay: number): AudioBuffer {
+function impulseResponse(ctx: BaseAudioContext, seconds: number, decay: number): AudioBuffer {
   const length = Math.floor(ctx.sampleRate * seconds);
   const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
   for (let channel = 0; channel < 2; channel++) {
@@ -95,7 +106,7 @@ function impulseResponse(ctx: AudioContext, seconds: number, decay: number): Aud
 // ── Katmanlar ──────────────────────────────────────────────────────────────
 
 /** Kalkış: düşen frekanslı kısa sinüs, torkun geldiği an. */
-function kick(ctx: AudioContext, out: AudioNode, t0: number) {
+function kick(ctx: BaseAudioContext, out: AudioNode, t0: number) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.frequency.setValueAtTime(95, t0);
@@ -109,7 +120,7 @@ function kick(ctx: AudioContext, out: AudioNode, t0: number) {
 }
 
 /** Motor ıslığı: motor dereceleri (1×, 2×, 3,2×), her biri hafif detune çiftli; titreşimle canlı. */
-function motorWhine(ctx: AudioContext, out: AudioNode, t0: number, T: number, pass: number, speed: Float32Array) {
+function motorWhine(ctx: BaseAudioContext, out: AudioNode, t0: number, T: number, pass: number, speed: Float32Array) {
   const bus = ctx.createGain();
   envelope(bus.gain, t0, T, pass, 0.9);
   const tone = ctx.createBiquadFilter();
@@ -153,7 +164,7 @@ function motorWhine(ctx: AudioContext, out: AudioNode, t0: number, T: number, pa
 }
 
 /** AMG güç tonu: derin üçgen dalga, yumuşak doygunlukla (waveshaper), alçak geçiren filtre. */
-function powerTone(ctx: AudioContext, out: AudioNode, t0: number, T: number, pass: number, speed: Float32Array) {
+function powerTone(ctx: BaseAudioContext, out: AudioNode, t0: number, T: number, pass: number, speed: Float32Array) {
   const osc = ctx.createOscillator();
   osc.type = "triangle";
   osc.frequency.setValueCurveAtTime(
@@ -177,7 +188,7 @@ function powerTone(ctx: AudioContext, out: AudioNode, t0: number, T: number, pas
 }
 
 /** Yol uğultusu (kahverengi gürültü) ve rüzgâr (beyaz gürültü, hızın karesi); geçişte soldan sağa kayar. */
-function roadAndWind(ctx: AudioContext, out: AudioNode, t0: number, T: number, pass: number, speed: Float32Array) {
+function roadAndWind(ctx: BaseAudioContext, out: AudioNode, t0: number, T: number, pass: number, speed: Float32Array) {
   const seconds = T + pass + 0.2;
   const panner = ctx.createStereoPanner();
   panner.pan.setValueAtTime(-0.15, t0);
@@ -246,7 +257,7 @@ function envelope(param: AudioParam, t0: number, T: number, pass: number, level:
   param.exponentialRampToValueAtTime(0.0001, t0 + T + pass);
 }
 
-function noiseSource(ctx: AudioContext, seconds: number, color: "white" | "brown"): AudioBufferSourceNode {
+function noiseSource(ctx: BaseAudioContext, seconds: number, color: "white" | "brown"): AudioBufferSourceNode {
   const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
   const data = buffer.getChannelData(0);
   let last = 0;

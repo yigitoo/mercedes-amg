@@ -15,7 +15,7 @@ import { FINISH_MS } from "./race-timing";
 import { FullscreenToggle } from "./fullscreen";
 import { TimingTower } from "./timing-tower";
 import { useLiveFeed, type FeedStatus } from "./use-live-feed";
-import { VehicleTile } from "./vehicle-tile";
+import { VehicleTile, type TraceMode } from "./vehicle-tile";
 
 /**
  * Canlı ekran (65" TV ve paylaşılan web linki).
@@ -41,19 +41,24 @@ export function LiveWall({ initial, initialHistory }: { initial: LiveSnapshot; i
   const towerOpen = tower === "open";
   const toggleTower = () => setTower(towerOpen ? "closed" : "open");
 
-  // S: sıralama kulesini aç/kapa (TV'de klavye/kumanda ile). Ref, dinleyiciyi her değişimde yeniden kurmamak için.
-  const towerRef = useRef(tower);
+  const [trace, setTrace] = useStoredState<TraceMode>("amg.trace.mode", "ecg", ["ecg", "chart"]);
+
+  // Kısayollar (TV'de klavye/kumanda ile): S sıralama kulesi, H iz modu (EKG / grafik).
+  // Ref, dinleyiciyi her değişimde yeniden kurmamak için.
+  const modesRef = useRef({ tower, trace });
   useEffect(() => {
-    towerRef.current = tower;
-  }, [tower]);
+    modesRef.current = { tower, trace };
+  }, [tower, trace]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "s" || event.metaKey || event.ctrlKey || event.target instanceof HTMLInputElement) return;
-      setTower(towerRef.current === "open" ? "closed" : "open");
+      if (event.metaKey || event.ctrlKey || event.altKey || event.target instanceof HTMLInputElement) return;
+      const key = event.key.toLowerCase();
+      if (key === "s") setTower(modesRef.current.tower === "open" ? "closed" : "open");
+      else if (key === "h") setTrace(modesRef.current.trace === "ecg" ? "chart" : "ecg");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setTower]);
+  }, [setTower, setTrace]);
 
   return (
     <div className="live-screen carbon relative min-h-[100dvh] xl:h-[100dvh] [--carbon-opacity:0.025]">
@@ -103,6 +108,7 @@ export function LiveWall({ initial, initialHistory }: { initial: LiveSnapshot; i
                 key={vehicle.id}
                 vehicle={vehicle}
                 history={history[vehicle.id] ?? []}
+                trace={trace}
                 now={snapshot.generatedAt}
                 gauge={snapshot.settings.gauge}
                 arrivedAt={arrivedAt.get(`${vehicle.id}:${vehicle.sessionStartedAt}`) ?? null}
@@ -111,7 +117,7 @@ export function LiveWall({ initial, initialHistory }: { initial: LiveSnapshot; i
             ))}
           </div>
           <div className={cn("hidden min-h-0 overflow-hidden transition-opacity duration-300 xl:flex xl:flex-col", !towerOpen && "opacity-0")} aria-hidden={!towerOpen}>
-            <TimingTower vehicles={snapshot.vehicles} />
+            <TimingTower vehicles={snapshot.vehicles} history={history} />
           </div>
         </main>
 

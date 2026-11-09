@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { formatDuration, formatTimeWithSeconds, fullName } from "@/lib/format";
 import { AnimatedNumber } from "./animated-number";
 import { Heartbeat } from "./heartbeat";
+import { EcgMonitor } from "./ecg-monitor";
 import { PulseTrace } from "./pulse-trace";
 import { RevBar } from "./rev-bar";
 import { RevDial } from "./rev-dial";
@@ -15,9 +16,14 @@ import { FinishOverlay, type FinishSummary } from "./finish-overlay";
 import { PerimeterTrace } from "./perimeter-trace";
 import { useRaceEffects } from "./use-race-effects";
 
+/** Panelin alt izi: EKG monitörü ya da son iki dakikanın nabız grafiği (canlı ekranda H ile değişir). */
+export type TraceMode = "ecg" | "chart";
+
 interface VehicleTileProps {
   vehicle: LiveVehicle;
+  /** Son nabız değerleri (eskiden yeniye); grafik modunda çizilir. */
   history: number[];
+  trace: TraceMode;
   /** Sunucu saati; geçen süre tüm ekranlarda aynı görünsün diye istemci saati kullanılmaz. */
   now: number;
   gauge: GaugeStyle;
@@ -33,10 +39,10 @@ interface VehicleTileProps {
  *   orta   nabız + sağda sürüş özeti; gösterge admin ayarına göre:
  *            "bar"  büyük rakam + altında yatay devir barı
  *            "dial" yuvarlak devir kadranı, rakam kadranın ortasında
- *   alt    son iki dakikanın izi, kalan yüksekliği doldurur
+ *   alt    EKG monitörü ya da nabız grafiği, kalan yüksekliği doldurur
  * Kırmızı bölgede panelin üst kenarı ve rakam AMG kırmızısına döner; başka hiçbir yerde kırmızı yok.
  */
-export const VehicleTile = memo(function VehicleTile({ vehicle, history, now, gauge, arrivedAt, finished }: VehicleTileProps) {
+export const VehicleTile = memo(function VehicleTile({ vehicle, history, trace, now, gauge, arrivedAt, finished }: VehicleTileProps) {
   const { status, driver } = vehicle;
   const { ignition, perimeter, finish } = useRaceEffects(arrivedAt, finished?.at ?? null);
   // Kontak taraması: gösterge bir an sonuna kadar çıkar, sonra gerçek nabza iner.
@@ -119,7 +125,12 @@ export const VehicleTile = memo(function VehicleTile({ vehicle, history, now, ga
         </div>
       )}
 
-      <div className={cn("relative mt-[3cqw] h-[24cqw] xl:h-auto xl:min-h-[10cqw]", gauge === "dial" ? "xl:flex-[1.2]" : "xl:flex-1")}>{!idle && <PulseTrace values={history} redline={redline} />}</div>
+      <div className={cn("relative mt-[3cqw] h-[24cqw] xl:h-auto xl:min-h-[10cqw]", gauge === "dial" ? "xl:flex-[1.2]" : "xl:flex-1")}>{!idle &&
+          (trace === "ecg" ? (
+            <EcgMonitor bpm={status === "live" ? vehicle.bpm : null} redline={redline} />
+          ) : (
+            <PulseTrace values={history} redline={redline} />
+          ))}</div>
     </article>
   );
 });

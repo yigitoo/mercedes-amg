@@ -8,6 +8,7 @@ import { useState, type ReactNode } from "react";
 import { logout } from "@/app/admin/actions";
 import { AmgLogo, MercedesBenzLockup } from "@/components/brand/logos";
 import { cn } from "@/lib/cn";
+import { buttonClasses } from "@/components/ui/button";
 import { ExportButton } from "./export-dialog";
 import { isActive, NAV_GROUPS, NAV_ITEMS, type NavItem } from "./nav-config";
 
@@ -80,10 +81,12 @@ function Sidebar({ pathname, storage }: { pathname: string; storage: AdminShellP
         <ExportButton size="sm" className="mt-2 w-full" />
       </div>
 
-      <div className="mt-3 border-t border-line px-6 py-5">
-        <StorageBadge storage={storage} />
+      <div className="mt-3 border-t border-line px-3 py-5">
+        <div className="px-3">
+          <StorageBadge storage={storage} />
+        </div>
         <form action={logout} className="mt-4">
-          <button type="submit" className="flex cursor-pointer items-center gap-2 text-sm text-muted transition-colors hover:text-fg">
+          <button type="submit" className={buttonClasses({ variant: "primary", size: "sm", className: "w-full cursor-pointer" })}>
             <SignOutIcon size={16} aria-hidden /> Çıkış yap
           </button>
         </form>
