@@ -174,6 +174,7 @@ Geçerli ölçüm 30-230 bpm; 15 sn veri gelmezse "Sinyal yok".
 ```
 brand/                 Marka kiti: logolar, fontlar, desenler, renk ve kullanım kuralları (README)
 desktop/               Electron masaüstü uygulaması (kiosk)
+deploy/                VPS kurulumu: docker compose (uygulama + Caddy HTTPS), Dockerfile kökte
 docs/API.md            Ingest ve okuma uç noktaları, bileklik için sözleşme
 simulator/             Nabız bilekliği simülatörü (bağımlılıksız, Node 24+)
 src/
@@ -215,11 +216,18 @@ Canlı ekran WebSocket kullandığı için uygulama sürekli çalışan bir Node
 Render ya da etkinlikteki bilgisayar). Vercel gibi sunucusuz ortamlarda `/api/ws` yoktur; admin ve ingest çalışır ama
 canlı ekran güncellenmez.
 
-1. Sunucuda ortam değişkenlerini tanımlayın (`MONGODB_URI`, `ADMIN_PASSWORD`, `INGEST_KEY`, `PORT`).
-2. MongoDB Atlas'ta Network Access'e sunucunun çıkış IP'sini ekleyin.
-3. `pnpm install && pnpm build && pnpm start`. Önünde bir ters vekil (nginx, Caddy) varsa `/api/ws` için WebSocket
-   upgrade başlıklarını (`Upgrade`, `Connection`) iletmesini sağlayın.
-4. Bilekliklere üretim adresini ve `INGEST_KEY`'i tanımlayın; `./mercedesctl desktop https://<alan-adı>` ile TV'yi açın.
+**VPS (önerilen):** [`deploy/`](deploy/README.md) Docker Compose ile uygulama + Caddy (otomatik HTTPS) kurar:
+
+```bash
+cd deploy && cp .env.example .env && $EDITOR .env   # DOMAIN, MONGODB_URI, ADMIN_PASSWORD, INGEST_KEY
+docker compose up -d --build
+```
+
+Docker olmadan: ortam değişkenlerini tanımlayıp `pnpm install && pnpm build && pnpm start`; önündeki ters vekil
+`/api/ws` için WebSocket upgrade başlıklarını (`Upgrade`, `Connection`) iletmeli.
+
+Sonra: MongoDB Atlas'ta Network Access'e sunucunun IP'sini ekleyin.
+Bilekliklere üretim adresini ve `INGEST_KEY`'i tanımlayın; `./mercedesctl desktop https://<alan-adı>` ile TV'yi açın.
 
 Etkinlik öncesi kontrol listesi: `GET /api/health` `storage: "mongodb"` dönüyor mu, simülatörle 1 dakikalık deneme
 (`node simulator/index.ts --url https://<alan-adı> --key <INGEST_KEY> --devices 1`), admin'de test sürüşünü bitirip

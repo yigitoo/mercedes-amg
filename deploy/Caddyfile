@@ -1,0 +1,6 @@
+# Otomatik HTTPS (Let's Encrypt). DOMAIN deploy/.env'den gelir; DNS A kaydı bu sunucuyu göstermeli.
+# reverse_proxy WebSocket upgrade'ini (/api/ws) ek ayar olmadan iletir.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}
