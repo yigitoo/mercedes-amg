@@ -5,7 +5,7 @@
  *
  *  Renk   Siyah zemin, beyaz yazı, tek vurgu AMG Red (#B21E23). Kırmızı yalnızca "aktive eder":
  *         birincil düğme, canlı göstergesi, kırmızı bölge. Başka renk eklenmez.
- *  Biçim  Keskin köşe (2px). AMG logosundaki eğik şeritler tek dekoratif motiftir.
+ *  Biçim  Yumuşak köşe (kontrol 6px, kart 12px). AMG logosundaki eğik şeritler tek dekoratif motiftir.
  *  Tema   Yalnız koyu: marka siyah, ekran karanlık garajda 65" TV'de izlenir.
  */
 
@@ -36,10 +36,10 @@
   /* Corpo A (serif) yalnızca "Mercedes-Benz" yazısında; arayüz metninde kullanılmaz. */
   --font-wordmark: var(--font-corpo-a);
 
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  /* Admin kartları: çok hafif yumuşatma. */
-  --radius-card: 6px;
+  /* Köşe ölçeği: kontroller (düğme, rozet, alan) yumuşak, kartlar ve paneller daha yuvarlak. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-card: 12px;
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-quart: cubic-bezier(0.5, 0, 0.75, 0);
@@ -61,6 +61,40 @@
     }
     40% {
       transform: scale(1.08);
+    }
+  }
+
+  /* Kontak: logodaki şeritler panelin üstünden geçer. */
+  @keyframes stripe-sweep {
+    0% {
+      transform: translateX(-120%);
+    }
+    100% {
+      transform: translateX(260%);
+    }
+  }
+
+  /* Sürücü adı aşağıdan yükselir. */
+  @keyframes rise-in {
+    0% {
+      transform: translateY(105%);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* Her yeni ölçümde iz ucundaki noktadan halka yayılır. */
+  @keyframes data-ping {
+    0% {
+      transform: scale(1);
+      opacity: 0.9;
+    }
+    100% {
+      transform: scale(3.2);
+      opacity: 0;
     }
   }
 
@@ -121,6 +155,16 @@
     background: var(--color-amg);
     color: white;
   }
+}
+
+/*
+ * Canlı ekran kırmızısı: TV gibi ışık yayan ekranda marka kırmızısı (#B21E23) sönük kalır; canlı ekranda aynı
+ * tonun daha parlak hali kullanılır. Admin, raporlar ve baskı marka kırmızısıyla kalır.
+ */
+.live-screen {
+  --color-amg: #e8112d;
+  --color-amg-hover: #ff2a44;
+  --color-amg-text: #ff4155;
 }
 
 @layer components {

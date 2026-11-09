@@ -20,6 +20,8 @@ export function RevBar({ bpm }: { bpm: number | null }) {
           return (
             <span
               key={i}
+              // Segmentler sırayla yanar: devir yükselirken soldan sağa akan dalga.
+              style={{ transitionDelay: `${i * 14}ms` }}
               className={cn(
                 "flex-1 -skew-x-[24deg] transition-colors duration-150",
                 on ? (red ? "bg-amg" : "bg-fg") : red ? "bg-amg/20" : "bg-white/[0.07]",

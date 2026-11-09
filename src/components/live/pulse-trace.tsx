@@ -1,6 +1,7 @@
 import { useId } from "react";
 
 import { REDLINE_BPM } from "@/domain/heart-rate";
+import { cn } from "@/lib/cn";
 
 const W = 300;
 const H = 100;
@@ -24,20 +25,30 @@ export function PulseTrace({ values, redline }: { values: number[]; redline: boo
   const stroke = redline ? "var(--color-amg)" : "var(--color-fg)";
   const fillId = useId();
 
+  const last = values.at(-1);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-full w-full" aria-hidden>
-      <defs>
-        <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="white" stopOpacity="0.14" />
-          <stop offset="100%" stopColor="white" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {[100, 130].map((bpm) => (
-        <line key={bpm} x1={0} x2={W} y1={y(bpm)} y2={y(bpm)} stroke="white" strokeOpacity={0.06} vectorEffect="non-scaling-stroke" />
-      ))}
-      <line x1={0} x2={W} y1={y(REDLINE_BPM)} y2={y(REDLINE_BPM)} stroke="var(--color-amg)" strokeOpacity={0.6} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-      {area && <path d={area} fill={`url(#${fillId})`} />}
-      {points.length > 1 && <polyline points={line} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
-    </svg>
+    <div className="relative h-full w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-full w-full" aria-hidden>
+        <defs>
+          <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="white" stopOpacity="0.14" />
+            <stop offset="100%" stopColor="white" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[100, 130].map((bpm) => (
+          <line key={bpm} x1={0} x2={W} y1={y(bpm)} y2={y(bpm)} stroke="white" strokeOpacity={0.06} vectorEffect="non-scaling-stroke" />
+        ))}
+        <line x1={0} x2={W} y1={y(REDLINE_BPM)} y2={y(REDLINE_BPM)} stroke="var(--color-amg)" strokeOpacity={0.6} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+        {area && <path d={area} fill={`url(#${fillId})`} />}
+        {points.length > 1 && <polyline points={line} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+      </svg>
+      {/* Canlı veri noktası: her yeni ölçümde halka yayılır (anahtar ölçüm sayısı, animasyon yeniden başlar). */}
+      {last != null && (
+        <span className="pointer-events-none absolute right-0 size-2 translate-x-1/2 -translate-y-1/2" style={{ top: `${(y(last) / H) * 100}%` }} aria-hidden>
+          <span key={values.length} className={cn("absolute inset-0 rounded-full motion-safe:animate-[data-ping_1s_ease-out_forwards]", redline ? "bg-amg" : "bg-fg")} />
+          <span className={cn("absolute inset-0 rounded-full", redline ? "bg-amg" : "bg-fg")} />
+        </span>
+      )}
+    </div>
   );
 }

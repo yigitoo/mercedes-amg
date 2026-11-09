@@ -54,6 +54,13 @@ saniye akıtır; **Dışa aktar** tüm nabız ve işlem kayıtlarını CSV olara
 
 Canlı ekranda tam ekran: başlıktaki düğme ya da `F`. Tam ekranda imleç 3 sn hareketsiz kalınca gizlenir.
 
+**Yeni sürücü animasyonu.** Ekran açıkken bir araca sürücü atanınca: gösterge gerçek bir AMG'nin kontak anındaki gibi
+kırmızı bölgeye kadar süpürüp gerçek nabza iner, logodaki beş şerit panelin üstünden geçer, panel kırmızı parlar,
+ad aşağıdan yükselir ve 8 sn "Yeni sürücü" etiketi kalır. Sol altta yayın bandı ("Sürüşe başladı") kayarak girer;
+aynı anda birden fazla biniş olursa sırayla gösterilir. Verinin aktığı başlıktaki sinyal şeritleri ve "ölçüm/dk"
+sayacıyla, her panelde de iz ucundaki her yeni ölçümde yayılan halkayla görünür. Canlı ekran kırmızısı, TV'de sönük
+kalmasın diye marka kırmızısının daha parlak tonudur (admin ve baskı marka kırmızısıyla kalır).
+
 ## Hızlı başlangıç
 
 Gereken: Node.js 24+ (pnpm, corepack ile otomatik açılır).

@@ -43,7 +43,7 @@ export function AdminShell({ storage, children }: AdminShellProps) {
 function Sidebar({ pathname, storage }: { pathname: string; storage: AdminShellProps["storage"] }) {
   return (
     // Yüzen panel: kenarlardan boşluklu, kendi içinde kayar.
-    <aside className="no-print sticky top-3 m-3 mr-0 hidden h-[calc(100dvh-1.5rem)] flex-col rounded-sm border border-line bg-surface shadow-2xl shadow-black/40 lg:flex">
+    <aside className="no-print sticky top-3 m-3 mr-0 hidden h-[calc(100dvh-1.5rem)] flex-col rounded-[var(--radius-card)] border border-line bg-surface shadow-2xl shadow-black/40 lg:flex">
       <div className="px-6 pt-7 pb-6">
         <MercedesBenzLockup className="text-base" />
         <div className="mt-5 border-t border-line pt-5">
@@ -133,7 +133,7 @@ function TabBar({ pathname }: { pathname: string }) {
   return (
     <div className="no-print fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
       {moreOpen && (
-        <div className="mb-2 rounded-sm border border-line-strong bg-raised/95 p-2 shadow-2xl shadow-black/60 backdrop-blur" role="menu">
+        <div className="mb-2 rounded-[var(--radius-card)] border border-line-strong bg-raised/95 p-2 shadow-2xl shadow-black/60 backdrop-blur" role="menu">
           {secondary.map((item) => (
             <Link key={item.href} href={item.href} role="menuitem" onClick={() => setMoreOpen(false)} className="flex h-11 items-center gap-3 rounded-sm px-3 text-sm hover:bg-line">
               <item.icon size={18} aria-hidden /> {item.label}
@@ -152,7 +152,7 @@ function TabBar({ pathname }: { pathname: string }) {
           </form>
         </div>
       )}
-      <nav aria-label="Panel" className="grid grid-cols-5 rounded-sm border border-line-strong bg-raised/95 p-1 shadow-2xl shadow-black/60 backdrop-blur">
+      <nav aria-label="Panel" className="grid grid-cols-5 rounded-[var(--radius-card)] border border-line-strong bg-raised/95 p-1 shadow-2xl shadow-black/60 backdrop-blur">
         {primary.map((item) => (
           <TabLink key={item.href} label={item.label} icon={item.icon} href={item.href} active={isActive(item.href, pathname)} onNavigate={() => setMoreOpen(false)} />
         ))}

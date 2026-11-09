@@ -32,7 +32,7 @@ export function TimingTower({ vehicles }: { vehicles: LiveVehicle[] }) {
   const waiting = mode === "bpm" ? vehicles.filter((v) => !live.includes(v)) : [];
 
   return (
-    <section aria-label="Araçlar ve anlık nabız" className="flex min-h-0 flex-1 flex-col border border-line bg-surface">
+    <section aria-label="Araçlar ve anlık nabız" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
       <header className="flex items-center justify-between gap-3 px-5 pt-5 pb-4">
         <div>
           <h2 className="font-title text-lg leading-none font-bold">Sıralama</h2>

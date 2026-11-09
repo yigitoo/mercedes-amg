@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 
-import { REDLINE_BPM, zoneOf } from "@/domain/heart-rate";
+import { GAUGE_RANGE, REDLINE_BPM, zoneOf } from "@/domain/heart-rate";
 import type { GaugeStyle, LiveVehicle } from "@/domain/types";
 import { cn } from "@/lib/cn";
 import { formatDuration, formatTimeWithSeconds, fullName } from "@/lib/format";
@@ -11,6 +11,7 @@ import { Heartbeat } from "./heartbeat";
 import { PulseTrace } from "./pulse-trace";
 import { RevBar } from "./rev-bar";
 import { RevDial } from "./rev-dial";
+import { useIgnition } from "./use-ignition";
 
 interface VehicleTileProps {
   vehicle: LiveVehicle;
@@ -18,6 +19,8 @@ interface VehicleTileProps {
   /** Sunucu saati; geçen süre tüm ekranlarda aynı görünsün diye istemci saati kullanılmaz. */
   now: number;
   gauge: GaugeStyle;
+  /** Bu araca ekran açıkken yeni sürücü bindiyse varış anı: kontak animasyonunu tetikler. */
+  arrivedAt: number | null;
 }
 
 /**
@@ -29,10 +32,14 @@ interface VehicleTileProps {
  *   alt    son iki dakikanın izi, kalan yüksekliği doldurur
  * Kırmızı bölgede panelin üst kenarı ve rakam AMG kırmızısına döner; başka hiçbir yerde kırmızı yok.
  */
-export const VehicleTile = memo(function VehicleTile({ vehicle, history, now, gauge }: VehicleTileProps) {
-  const { status, bpm, driver } = vehicle;
+export const VehicleTile = memo(function VehicleTile({ vehicle, history, now, gauge, arrivedAt }: VehicleTileProps) {
+  const { status, driver } = vehicle;
+  const ignition = useIgnition(arrivedAt);
+  // Kontak taraması: gösterge bir an sonuna kadar çıkar, sonra gerçek nabza iner.
+  const bpm = ignition === "sweep" ? GAUGE_RANGE.max : vehicle.bpm;
   const redline = bpm != null && bpm >= REDLINE_BPM;
   const idle = status === "idle";
+  const live = status === "live" || ignition === "sweep";
 
   return (
     <article
@@ -42,42 +49,65 @@ export const VehicleTile = memo(function VehicleTile({ vehicle, history, now, ga
       {/* Kırmızı bölge göstergesi: panelin üst kenarı */}
       <span className={cn("absolute inset-x-0 top-0 h-[3px] transition-colors duration-300", redline ? "bg-amg" : "bg-transparent")} aria-hidden />
 
+      {/* Yeni sürücü: çerçeve parlar ve söner */}
+      <span
+        className={cn(
+          "pointer-events-none absolute inset-0 z-10 transition-[box-shadow] duration-[1500ms]",
+          ignition ? "shadow-[inset_0_0_0_2px_var(--color-amg),inset_0_0_60px_-10px_var(--color-amg)]" : "shadow-[inset_0_0_0_0_transparent]",
+        )}
+        aria-hidden
+      />
+      {/* Kontak: logodaki beş şerit panelin üstünden geçer */}
+      {ignition === "sweep" && (
+        <span className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[45%] gap-[3%] motion-safe:animate-[stripe-sweep_1.1s_cubic-bezier(0.65,0,0.35,1)_both]" aria-hidden>
+          {[1, 0.8, 0.6, 0.4, 0.22].map((opacity, i) => (
+            <span key={i} className="h-full flex-1 -skew-x-[24deg] bg-amg" style={{ opacity }} />
+          ))}
+        </span>
+      )}
+
       <header className="flex items-start gap-[3cqw] px-[5cqw] pt-[4.5cqw]">
         <span className="font-title text-[9cqw] leading-[0.8] font-light text-dim tabular">{String(vehicle.slot).padStart(2, "0")}</span>
         <div className="min-w-0 flex-1">
-          <p className={cn("truncate font-title text-[5.6cqw] leading-tight", driver ? "font-bold text-fg" : "text-muted")}>
-            {driver ? fullName(driver) : "Sürücü bekleniyor"}
-          </p>
+          {/* Ad, sürücü değişince aşağıdan yükselir (anahtar: sürüş başlangıcı) */}
+          <span className="block overflow-hidden">
+            <span
+              key={vehicle.sessionStartedAt ?? "idle"}
+              className={cn("block truncate font-title text-[5.6cqw] leading-tight", driver ? "font-bold text-fg" : "text-muted", ignition && "motion-safe:animate-[rise-in_0.7s_cubic-bezier(0.16,1,0.3,1)_both]")}
+            >
+              {driver ? fullName(driver) : "Sürücü bekleniyor"}
+            </span>
+          </span>
           <p className="mt-[0.6cqw] truncate font-label text-[3cqw] tracking-[0.08em] text-muted uppercase">
             {vehicle.plate}
             <span className="mx-[1.5cqw] text-dim">/</span>
             {vehicle.model}
           </p>
         </div>
-        <StatusTag vehicle={vehicle} />
+        {ignition ? <NewDriverTag /> : <StatusTag vehicle={vehicle} />}
       </header>
 
       <div
         className={cn(
           "mt-[4cqw] grid grid-cols-[1fr_auto] gap-[4cqw] px-[5cqw] transition-opacity duration-300",
           gauge === "dial" ? "items-center xl:min-h-0 xl:flex-[5]" : "items-end",
-          status !== "live" && "opacity-35",
+          !live && "opacity-35",
         )}
       >
         {gauge === "dial" ? (
           <div className="flex h-[62cqw] min-h-0 justify-center xl:h-full">
             <RevDial bpm={bpm}>
-              <Readout bpm={bpm} redline={redline} size="dial" />
+              <Readout bpm={bpm} redline={redline} size="dial" sweeping={ignition === "sweep"} />
             </RevDial>
           </div>
         ) : (
-          <Readout bpm={bpm} redline={redline} size="bar" />
+          <Readout bpm={bpm} redline={redline} size="bar" sweeping={ignition === "sweep"} />
         )}
         <SessionStats vehicle={vehicle} now={now} hidden={idle} />
       </div>
 
       {gauge === "bar" && (
-        <div className={cn("mt-[4.5cqw] px-[5cqw] transition-opacity duration-300", status !== "live" && "opacity-35")}>
+        <div className={cn("mt-[4.5cqw] px-[5cqw] transition-opacity duration-300", !live && "opacity-35")}>
           <RevBar bpm={bpm} />
         </div>
       )}
@@ -88,13 +118,13 @@ export const VehicleTile = memo(function VehicleTile({ vehicle, history, now, ga
 });
 
 /** Bölge etiketi + nabız rakamı. Bar modunda kahraman boyutta, kadranda kadranın içine sığacak boyutta. */
-function Readout({ bpm, redline, size }: { bpm: number | null; redline: boolean; size: "bar" | "dial" }) {
+function Readout({ bpm, redline, size, sweeping }: { bpm: number | null; redline: boolean; size: "bar" | "dial"; sweeping: boolean }) {
   const dial = size === "dial";
   return (
     <div className={cn(dial && "flex flex-col items-center")}>
       <div className={cn("flex items-center gap-[1.6cqw] font-label tracking-[0.12em] uppercase", dial ? "text-[4.6cqw]" : "text-[3cqw]")}>
         <Heartbeat bpm={bpm} className={dial ? "size-[5cqw]" : "size-[3.6cqw]"} />
-        <span className={redline ? "text-amg-text" : "text-soft"}>{bpm != null ? zoneOf(bpm).label : "Nabız"}</span>
+        <span className={redline ? "text-amg-text" : "text-soft"}>{sweeping ? "Kontak" : bpm != null ? zoneOf(bpm).label : "Nabız"}</span>
       </div>
       <p className={cn("flex items-baseline", dial ? "mt-[2cqw] flex-col items-center" : "mt-[1cqw] gap-[2cqw]")}>
         <span
@@ -119,6 +149,15 @@ function SessionStats({ vehicle, now, hidden }: { vehicle: LiveVehicle; now: num
       <Stat label="Ort." value={vehicle.stats?.avg ?? "--"} />
       <Stat label="Maks." value={vehicle.stats?.max ?? "--"} highlight={(vehicle.stats?.max ?? 0) >= REDLINE_BPM} />
     </dl>
+  );
+}
+
+function NewDriverTag() {
+  return (
+    <span className="flex items-center gap-[1.2cqw] rounded-sm bg-amg px-[1.8cqw] py-[0.8cqw] font-label text-[2.6cqw] font-bold tracking-[0.14em] text-white uppercase">
+      <span className="size-[1.4cqw] animate-live-dot rounded-full bg-white" aria-hidden />
+      Yeni sürücü
+    </span>
   );
 }
 
