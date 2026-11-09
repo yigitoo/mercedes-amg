@@ -20,7 +20,7 @@ const DESCRIPTION = `
 ![Mercedes-AMG](/brand/logos/mercedes-amg-lockup.svg)
 
 **Mercedes-AMG Araba Lansmanı**: test sürüşündeki 8 aracın sürücü nabzını canlı ekrana taşıyan sistemin API'si.
-Araçtaki nabız bilekliği ölçümü \`POST /api/ingest\`'e gönderir; canlı ekran \`GET /api/stream\` ile saniyede bir günceller.
+Araçtaki nabız bilekliği ölçümü \`POST /api/ingest\`'e gönderir; canlı ekran WebSocket \`/api/ws\` (yedeği SSE \`GET /api/stream\`) ile saniyede bir günceller.
 
 ## Akış
 
@@ -91,9 +91,9 @@ export function buildOpenApiDocument() {
       "/api/stream": {
         get: {
           tags: ["Canlı ekran"],
-          summary: "Canlı akış (Server-Sent Events)",
+          summary: "Canlı akış (Server-Sent Events, WebSocket yedeği)",
           description:
-            "Saniyede bir `snapshot` olayı. Veritabanına ulaşılamazsa akış kopmaz, `stale: true` ile son bilinen görüntü gelir. Akış 280 sn'de kapanır; `retry: 1000` ile tarayıcı yeniden bağlanır.",
+            "Asıl canlı akış WebSocket `/api/ws`'tir (Node sunucusu `server.mts`; OpenAPI WebSocket'i tanımlayamaz, bkz. docs/API.md): saniyede bir `{\"type\":\"snapshot\",\"snapshot\":...}` mesajı. Bu SSE uç noktası Vercel gibi WebSocket olmayan ortamlar için yedektir. Saniyede bir `snapshot` olayı. Veritabanına ulaşılamazsa akış kopmaz, `stale: true` ile son bilinen görüntü gelir. Akış 280 sn'de kapanır; `retry: 1000` ile tarayıcı yeniden bağlanır.",
           responses: {
             "200": {
               description: "`event: snapshot` + `data: <LiveSnapshot JSON>`",

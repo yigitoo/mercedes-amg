@@ -117,7 +117,7 @@ cmd_setup() {
 # ============================================================================
 cmd_web() {
   if port_open "$PORT" && ! is_running web; then die ":$PORT başka bir süreçte açık (lsof -iTCP:$PORT). PORT=3001 $CLI up ile başka port seçin"; fi
-  start_bg web pnpm exec next dev -p "$PORT"
+  start_bg web env PORT="$PORT" node server.mts
   wait_healthy
 }
 

@@ -123,8 +123,10 @@ flowchart LR
   svc --> repo{{"FleetRepository"}}
   repo --> mongo[("MongoDB")]
   repo -. yerel .-> mem[("Bellek")]
-  svc --> stream["GET /api/stream<br/>SSE, 1 Hz"]
-  stream --> tv["Canlı ekran<br/>TV · link · masaüstü"]
+  svc --> ws["WS /api/ws<br/>WebSocket, 1 Hz"]
+  svc -. "Vercel / yedek" .-> stream["GET /api/stream<br/>SSE, 1 Hz"]
+  ws --> tv["Canlı ekran<br/>TV · link · masaüstü"]
+  stream -.-> tv
 ```
 
 Katmanlar tek yönlü bağımlıdır; her katman yalnız altındakini bilir:
@@ -143,8 +145,11 @@ Etkinlik canlı yapıldığı için sistem "bir şey bozulursa ekran kararmasın
 
 - **Canlı ekran hata sayfasına düşmez.** `getLiveSnapshot()` hiçbir zaman hata fırlatmaz: veritabanı yanıt vermezse son
   başarılı görüntü `stale: true` ile döner, ekran "Veri gecikiyor" der ve sonraki saniye yeniden dener.
-- **SSE akışı kendini yeniler.** Vercel fonksiyonları süreli olduğu için akış 280 sn'de kapanır, tarayıcı 1 sn sonra
-  yeniden bağlanır. 6 sn snapshot gelmezse rozet "Bağlantı yok"a döner.
+- **Canlı akış WebSocket, yedeği SSE.** `server.mts` (Next.js'i saran Node sunucusu) `/api/ws`'te WebSocket sunar:
+  kaç ekran bağlı olursa olsun saniyede tek snapshot üretilip hepsine yayınlanır, ekran yoksa durur; 15 sn'de bir
+  ping ile ölü bağlantılar kapanır. İstemci WebSocket'i 3 sn içinde açamazsa (Vercel'de özel sunucu yoktur) sayfa
+  boyunca `/api/stream` SSE akışını kullanır; SSE akışı 280 sn'de kapanır, tarayıcı 1 sn sonra yeniden bağlanır.
+  Açılmış WebSocket koparsa 1-5 sn aralıkla yeniden denenir. 6 sn snapshot gelmezse rozet "Bağlantı yok"a döner.
 - **Bileklik veriyi kaybetmez.** Ölçümler zaman damgasıyla kuyruğa girer; sunucuya ulaşılamazsa birikir ve tek istekte
   toplu gönderilir (en fazla 500). Saati kaymış cihazın zaman damgası sunucu saatine çekilir.
 - **Toplu yazma.** Bir ingest isteği kaç ölçüm içerirse içersin MongoDB'ye sabit 3 toplu işlem yapar
@@ -178,11 +183,12 @@ src/
   app/                 Sayfalar ve API (Next.js App Router)
     page.tsx           Canlı ekran
     admin/             Admin paneli: (panel)/ sayfalar, login, actions.ts
-    api/               ingest · stream · live · health · admin/*/csv
+    api/               ingest · stream · live · health · admin/*/csv  (/api/ws: server.mts)
   components/          live/ · admin/ · ui/ · brand/
   domain/              Saf tipler ve kurallar
   server/              db/ (depolar) · services/ · auth · env · http
   proxy.ts             /admin koruması (Next 16'da middleware'in adı)
+server.mts             Node sunucusu: Next.js + /api/ws WebSocket (pnpm dev / pnpm start)
 mercedesctl            Yönetim betiği
 ```
 

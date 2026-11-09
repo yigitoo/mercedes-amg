@@ -52,9 +52,24 @@ curl -X POST https://<alan-adı>/api/ingest \
   -d '{"deviceId":"band-01","bpm":118}'
 ```
 
+## WS /api/ws
+
+Canlı ekranın WebSocket akışı (`server.mts` ile çalışırken: `pnpm dev`, `pnpm start`, `mercedesctl up`). Her saniye
+bir metin mesajı: `{"type":"snapshot","snapshot":<LiveSnapshot>}`; yeni bağlanan istemci son görüntüyü hemen alır.
+Sunucu 15 sn'de bir ping gönderir, pong vermeyen bağlantıyı kapatır. İstemciden mesaj beklenmez.
+
+```js
+const ws = new WebSocket("wss://<alan-adı>/api/ws");
+ws.onmessage = (e) => { const { type, snapshot } = JSON.parse(e.data); /* type === "snapshot" */ };
+```
+
+Vercel'de özel sunucu çalışmadığı için bu uç nokta yoktur; canlı ekran 3 sn içinde bağlanamazsa `GET /api/stream`'e
+geçer.
+
 ## GET /api/stream
 
-Canlı ekranın Server-Sent Events akışı. Her saniye bir `snapshot` olayı:
+Canlı ekranın Server-Sent Events akışı (WebSocket'in yedeği). Her saniye bir `snapshot` olayı; içerik WebSocket'teki
+`snapshot` alanıyla aynıdır:
 
 ```json
 {
