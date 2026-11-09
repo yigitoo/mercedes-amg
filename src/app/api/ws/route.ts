@@ -20,9 +20,13 @@ const CONNECTION_LIFETIME_MS = 280_000;
  * start, deploy/) /api/ws upgrade'ini server.mts karşılar, bu route'a hiç gelinmez. Başka her durumda 404 döner,
  * el sıkışma başarısız olur ve ekran /api/stream (SSE) yedeğine geçer.
  */
-export async function GET() {
+export async function GET(request: Request) {
   await connection(); // statik ön-render'dan çık: upgrade yalnız istek anında
   if (env.deployTarget !== "vercel") return jsonError(404, "ws_unavailable");
+  // Düz GET (tarayıcı adres çubuğu, izleme): upgradeWebSocket() hata fırlatmasın, ne beklendiğini söyle.
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return new Response("WebSocket bekleniyor", { status: 426, headers: { Upgrade: "websocket", "Cache-Control": "no-store" } });
+  }
 
   return upgradeWebSocket(
     (ws) => {
