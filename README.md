@@ -107,7 +107,7 @@ canlı ekranı yeniden yüklerdi.
 | `desktop [url]` | Masaüstü uygulaması; varsayılan yerel sunucu, istenirse Vercel adresi |
 | `setup` | Bağımlılıklar + `.env.local` |
 | `check` / `build` | Tip + lint / üstüne üretim build |
-| `deploy [prod]` | Vercel önizleme ya da canlı dağıtım |
+| `deploy [prod]` | Vercel önizleme ya da canlı dağıtım (canlı ekran orada SSE ile çalışır) |
 | `promo [url]` | Video kaydı senaryosu (~95 sn): canlı ekranı tam ekran açıp kayda başlayın, betik arkada admin API'si üzerinden bitiş bayrakları, sürücü tanıtımları, kırmızı bölge anı, sürücü değişimi ve gösterge geçişini oynatır. Her adım zaman koduyla yazılır |
 | `db:reset` | Sürüşler, ölçümler ve kayıtlar silinir, filo yeniden tohumlanır (onay ister; aynı veritabanını kullanan canlı ortamı da etkiler) |
 | `doctor` | Node, pnpm, ortam değişkenleri, servis durumu |
@@ -123,8 +123,10 @@ flowchart LR
   svc --> repo{{"FleetRepository"}}
   repo --> mongo[("MongoDB")]
   repo -. yerel .-> mem[("Bellek")]
-  svc --> stream["GET /api/stream<br/>SSE, 1 Hz"]
-  stream --> tv["Canlı ekran<br/>TV · link · masaüstü"]
+  svc --> ws["WS /api/ws<br/>WebSocket, 1 Hz"]
+  svc -. "yedek · M" .-> stream["GET /api/stream<br/>SSE, 1 Hz"]
+  ws --> tv["Canlı ekran<br/>TV · link · masaüstü"]
+  stream -.-> tv
 ```
 
 Katmanlar tek yönlü bağımlıdır; her katman yalnız altındakini bilir:
@@ -143,8 +145,15 @@ Etkinlik canlı yapıldığı için sistem "bir şey bozulursa ekran kararmasın
 
 - **Canlı ekran hata sayfasına düşmez.** `getLiveSnapshot()` hiçbir zaman hata fırlatmaz: veritabanı yanıt vermezse son
   başarılı görüntü `stale: true` ile döner, ekran "Veri gecikiyor" der ve sonraki saniye yeniden dener.
-- **SSE akışı kendini yeniler.** Vercel fonksiyonları süreli olduğu için akış 280 sn'de kapanır, tarayıcı 1 sn sonra
-  yeniden bağlanır. 6 sn snapshot gelmezse rozet "Bağlantı yok"a döner.
+- **Canlı akış WebSocket, yedeği SSE.** `/api/ws`'i `DEPLOY_TARGET`'e göre iki altyapıdan biri sunar:
+  - `node` (düz altyapı): `server.mts` (Next.js'i saran Node sunucusu). Kaç ekran bağlı olursa olsun saniyede tek
+    snapshot üretilip hepsine yayınlanır, ekran yoksa durur; 15 sn'de bir ping ile ölü bağlantılar kapanır.
+  - `vercel`: `src/app/api/ws/route.ts` (Vercel Functions WebSocket). Her bağlantı kendi fonksiyonunda saniyede bir
+    snapshot okur; fonksiyon süresi dolmadan 280 sn'de kapanır, ekran 1 sn sonra yeniden bağlanır.
+
+  Ekran WebSocket'i 3 sn içinde açamazsa `/api/stream` SSE akışına geçer; ekranda **M** tuşu tercihi WebSocket ↔ SSE arasında elle değiştirir, rozet
+  kullanılan taşımayı gösterir (`WS`, `SSE`, `SSE · yedek`). Kopan bağlantı kendiliğinden yeniden kurulur, bu sürede
+  ekran son değerlerle kalır. 6 sn snapshot gelmezse rozet "Bağlantı yok"a döner.
 - **Bileklik veriyi kaybetmez.** Ölçümler zaman damgasıyla kuyruğa girer; sunucuya ulaşılamazsa birikir ve tek istekte
   toplu gönderilir (en fazla 500). Saati kaymış cihazın zaman damgası sunucu saatine çekilir.
 - **Toplu yazma.** Bir ingest isteği kaç ölçüm içerirse içersin MongoDB'ye sabit 3 toplu işlem yapar
@@ -172,17 +181,19 @@ Geçerli ölçüm 30-230 bpm; 15 sn veri gelmezse "Sinyal yok".
 ```
 brand/                 Marka kiti: logolar, fontlar, desenler, renk ve kullanım kuralları (README)
 desktop/               Electron masaüstü uygulaması (kiosk)
+deploy/                VPS kurulumu: docker compose (uygulama + Caddy HTTPS), Dockerfile kökte
 docs/API.md            Ingest ve okuma uç noktaları, bileklik için sözleşme
 simulator/             Nabız bilekliği simülatörü (bağımlılıksız, Node 24+)
 src/
   app/                 Sayfalar ve API (Next.js App Router)
     page.tsx           Canlı ekran
     admin/             Admin paneli: (panel)/ sayfalar, login, actions.ts
-    api/               ingest · stream · live · health · admin/*/csv
+    api/               ingest · stream · live · health · admin/*/csv  (/api/ws: server.mts)
   components/          live/ · admin/ · ui/ · brand/
   domain/              Saf tipler ve kurallar
   server/              db/ (depolar) · services/ · auth · env · http
   proxy.ts             /admin koruması (Next 16'da middleware'in adı)
+server.mts             Node sunucusu: Next.js + /api/ws WebSocket (pnpm dev / pnpm start)
 mercedesctl            Yönetim betiği
 ```
 
@@ -202,18 +213,31 @@ MongoDB Node.js sürücüsü 7 · Electron. Fontlar yalnız Mercedes kurumsal fo
 | `ADMIN_PASSWORD` | Üretimde evet | Admin ekip şifresi. Yerelde boşsa `amg-demo`. |
 | `INGEST_KEY` | Üretimde evet | Bilekliklerin `X-Device-Key` başlığı. Üretmek için `openssl rand -hex 24`. |
 | `DEMO_SEED` | Hayır | `true` ise boş veritabanına örnek sürücüler atanır. Etkinlikte `false`. |
+| `DEPLOY_TARGET` | Hayır | `vercel` ya da `node`: `/api/ws`'i kimin sunacağı. Boşsa otomatik (Vercel'de `vercel`, başka her yerde `node`). `/api/health` değeri gösterir. |
 
 MongoDB koleksiyonları ilk bağlantıda indeksleriyle otomatik oluşur: `vehicles`, `sessions`, `readings`,
 `audit_log`, `settings`.
 
 ## Dağıtım
 
-Vercel:
+İki altyapı da desteklenir; seçim `DEPLOY_TARGET` ile (boşsa otomatik: Vercel'de `vercel`, başka her yerde `node`).
 
-1. Projeyi Vercel'e bağlayın, ortam değişkenlerini girin (`MONGODB_URI`, `ADMIN_PASSWORD`, `INGEST_KEY`).
-2. MongoDB Atlas'ta Network Access'e Vercel çıkış IP'lerini ya da `0.0.0.0/0` ekleyin.
-3. `./mercedesctl deploy prod`.
-4. Bilekliklere üretim adresini ve `INGEST_KEY`'i tanımlayın; `./mercedesctl desktop https://<alan-adı>` ile TV'yi açın.
+**Vercel (`DEPLOY_TARGET=vercel`):** `./mercedesctl deploy prod`. WebSocket, Vercel Functions WebSocket desteğiyle
+`src/app/api/ws/route.ts`'ten sunulur; Vercel projesinde `DEPLOY_TARGET`'i boş bırakmak yeterli.
+
+**Düz Node altyapısı (`DEPLOY_TARGET=node`):** VPS, Railway, Fly.io ya da etkinlikteki bilgisayar; WebSocket'i
+`server.mts` sunar. [`deploy/`](deploy/README.md) Docker Compose ile uygulama + Caddy (otomatik HTTPS) kurar:
+
+```bash
+cd deploy && cp .env.example .env && $EDITOR .env   # DOMAIN, MONGODB_URI, ADMIN_PASSWORD, INGEST_KEY
+docker compose up -d --build
+```
+
+Docker olmadan: ortam değişkenlerini tanımlayıp `pnpm install && pnpm build && pnpm start`; önündeki ters vekil
+`/api/ws` için WebSocket upgrade başlıklarını (`Upgrade`, `Connection`) iletmeli.
+
+Sonra: MongoDB Atlas'ta Network Access'e sunucunun IP'sini ekleyin.
+Bilekliklere üretim adresini ve `INGEST_KEY`'i tanımlayın; `./mercedesctl desktop https://<alan-adı>` ile TV'yi açın.
 
 Etkinlik öncesi kontrol listesi: `GET /api/health` `storage: "mongodb"` dönüyor mu, simülatörle 1 dakikalık deneme
 (`node simulator/index.ts --url https://<alan-adı> --key <INGEST_KEY> --devices 1`), admin'de test sürüşünü bitirip

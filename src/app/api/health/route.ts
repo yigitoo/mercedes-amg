@@ -1,4 +1,4 @@
-import { storageKind } from "@/server/env";
+import { env, storageKind } from "@/server/env";
 import { getRepository } from "@/server/db";
 import { NO_STORE } from "@/server/http";
 
@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const vehicles = await (await getRepository()).listVehicles();
     return Response.json(
-      { ok: true, storage: storageKind, vehicles: vehicles.length, latencyMs: Date.now() - startedAt },
+      { ok: true, storage: storageKind, deployTarget: env.deployTarget, vehicles: vehicles.length, latencyMs: Date.now() - startedAt },
       { headers: NO_STORE },
     );
   } catch (error) {

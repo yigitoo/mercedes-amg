@@ -14,7 +14,7 @@ import { RaceBanner } from "./race-banner";
 import { FINISH_MS } from "./race-timing";
 import { FullscreenToggle } from "./fullscreen";
 import { TimingTower } from "./timing-tower";
-import { useLiveFeed, type FeedStatus } from "./use-live-feed";
+import { useLiveFeed, type FeedStatus, type Transport } from "./use-live-feed";
 import { VehicleTile, type TraceMode } from "./vehicle-tile";
 
 /**
@@ -23,7 +23,9 @@ import { VehicleTile, type TraceMode } from "./vehicle-tile";
  *   Tablet: 2 sütun, mobil: tek sütun; sıralama kulesi gizlenir (kartlar zaten görünür).
  */
 export function LiveWall({ initial, initialHistory }: { initial: LiveSnapshot; initialHistory: Record<VehicleId, HeartRateSample[]> }) {
-  const { snapshot, history, status, arrivals, departures, samplesPerMinute, tick } = useLiveFeed(initial, initialHistory);
+  // Akış modu tercihi (M ile değişir): WebSocket açılamazsa ekran kendiliğinden SSE'ye geçer.
+  const [feedMode, setFeedMode] = useStoredState<Transport>("amg.feed.mode", "ws", ["ws", "sse"]);
+  const { snapshot, history, status, arrivals, departures, samplesPerMinute, tick, transport } = useLiveFeed(initial, initialHistory, feedMode);
   // Lansman açılışı bitmeden ekran görünmez; yıldız büyürken yumuşakça netleşerek gelir.
   const [revealed, setRevealed] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -43,22 +45,23 @@ export function LiveWall({ initial, initialHistory }: { initial: LiveSnapshot; i
 
   const [trace, setTrace] = useStoredState<TraceMode>("amg.trace.mode", "ecg", ["ecg", "chart"]);
 
-  // Kısayollar (TV'de klavye/kumanda ile): S sıralama kulesi, H iz modu (EKG / grafik).
+  // Kısayollar (TV'de klavye/kumanda ile): S sıralama kulesi, H iz modu (EKG / grafik), M akış modu (WebSocket / SSE).
   // Ref, dinleyiciyi her değişimde yeniden kurmamak için.
-  const modesRef = useRef({ tower, trace });
+  const modesRef = useRef({ tower, trace, feedMode });
   useEffect(() => {
-    modesRef.current = { tower, trace };
-  }, [tower, trace]);
+    modesRef.current = { tower, trace, feedMode };
+  }, [tower, trace, feedMode]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || event.target instanceof HTMLInputElement) return;
       const key = event.key.toLowerCase();
       if (key === "s") setTower(modesRef.current.tower === "open" ? "closed" : "open");
       else if (key === "h") setTrace(modesRef.current.trace === "ecg" ? "chart" : "ecg");
+      else if (key === "m") setFeedMode(modesRef.current.feedMode === "ws" ? "sse" : "ws");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setTower, setTrace]);
+  }, [setTower, setTrace, setFeedMode]);
 
   return (
     <div className="live-screen carbon relative min-h-[100dvh] xl:h-[100dvh] [--carbon-opacity:0.025]">
@@ -76,7 +79,7 @@ export function LiveWall({ initial, initialHistory }: { initial: LiveSnapshot; i
             <h1 className="font-title text-xl leading-none font-bold xl:text-2xl">{snapshot.settings.title}</h1>
             {snapshot.settings.subtitle && <p className="mt-1.5 text-sm text-muted">{snapshot.settings.subtitle}</p>}
           </div>
-          <FeedIndicator status={status} samplesPerMinute={samplesPerMinute} tick={tick} />
+          <FeedIndicator status={status} samplesPerMinute={samplesPerMinute} tick={tick} mode={feedMode} transport={transport} />
           <button
             type="button"
             onClick={toggleTower}
@@ -142,15 +145,35 @@ const FEED_LABEL: Record<FeedStatus, string> = {
   offline: "Bağlantı yok",
 };
 
+const TRANSPORT_LABEL: Record<Transport, string> = { ws: "WS", sse: "SSE" };
+
 /**
  * Akış göstergesi: bağlantı durumu + verinin aktığını gösteren sinyal şeritleri (her snapshot'ta bir adım
- * ilerler) ve son bir dakikadaki ölçüm sayısı.
+ * ilerler), son bir dakikadaki ölçüm sayısı ve kullanılan taşıma (WS / SSE; M ile değişir).
  */
-function FeedIndicator({ status, samplesPerMinute, tick }: { status: FeedStatus; samplesPerMinute: number; tick: number }) {
+function FeedIndicator({
+  status,
+  samplesPerMinute,
+  tick,
+  mode,
+  transport,
+}: {
+  status: FeedStatus;
+  samplesPerMinute: number;
+  tick: number;
+  mode: Transport;
+  transport: Transport;
+}) {
   const live = status === "live";
+  // WebSocket seçili ama sunucuda yok (ör. Vercel): SSE yedeğiyle akıyor.
+  const fallback = mode === "ws" && transport === "sse";
+  const transportTitle = fallback
+    ? "WebSocket bu sunucuda yok, SSE yedeği kullanılıyor (M: akış modu)"
+    : `Akış: ${transport === "ws" ? "WebSocket" : "Server-Sent Events"} (M: akış modu)`;
   return (
     <span
       role="status"
+      title={transportTitle}
       className={cn(
         "flex items-center gap-3 rounded-sm border px-3 py-1.5 font-label text-sm tracking-wider uppercase",
         live ? "border-line-strong text-fg" : "border-amg text-amg-text",
@@ -168,6 +191,10 @@ function FeedIndicator({ status, samplesPerMinute, tick }: { status: FeedStatus;
           <span className="text-muted normal-case tabular">{samplesPerMinute.toLocaleString("tr-TR")} ölçüm/dk</span>
         </>
       )}
+      <span className="border-l border-line-strong pl-3 text-xs text-muted" aria-label={transportTitle}>
+        {TRANSPORT_LABEL[transport]}
+        {fallback && <span className="text-dim"> · yedek</span>}
+      </span>
     </span>
   );
 }

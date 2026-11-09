@@ -8,7 +8,7 @@ import { getFleet, type FleetEntry } from "./fleet-service";
 import { getEventSettings } from "./settings-service";
 
 /**
- * Canlı ekranın tek veri kaynağı (sayfa, SSE akışı ve JSON uç noktası).
+ * Canlı ekranın tek veri kaynağı (sayfa, WebSocket yayını, SSE akışı ve JSON uç noktası).
  *
  * Dayanıklılık kuralı: bu fonksiyon HİÇBİR ZAMAN hata fırlatmaz. TV ekranı hata sayfasına düşmemeli.
  *   - Veritabanı yanıt vermezse son başarılı görüntü `stale: true` ile döner; ekran "veri gecikiyor" der.

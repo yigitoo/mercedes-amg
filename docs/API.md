@@ -52,9 +52,27 @@ curl -X POST https://<alan-adı>/api/ingest \
   -d '{"deviceId":"band-01","bpm":118}'
 ```
 
+## WS /api/ws
+
+Canlı ekranın WebSocket akışı (Vercel'de ya da `server.mts` ile: `pnpm dev`, `pnpm start`, `mercedesctl up`, `deploy/`). Her saniye
+bir metin mesajı: `{"type":"snapshot","snapshot":<LiveSnapshot>}`; yeni bağlanan istemci son görüntüyü hemen alır.
+Sunucu 15 sn'de bir ping gönderir, pong vermeyen bağlantıyı kapatır. İstemciden mesaj beklenmez.
+
+```js
+const ws = new WebSocket("wss://<alan-adı>/api/ws");
+ws.onmessage = (e) => { const { type, snapshot } = JSON.parse(e.data); /* type === "snapshot" */ };
+```
+
+Sunan taraf `DEPLOY_TARGET`'e bağlıdır: `node` → `server.mts` (tek yayın), `vercel` → `src/app/api/ws/route.ts` (Vercel
+Functions WebSocket; bağlantı 280 sn'de kapanır, istemci yeniden bağlanır). Canlı ekran 3 sn içinde bağlanamazsa
+`GET /api/stream`'e geçer.
+Ekranda **M** tuşu tercihi WebSocket ↔ SSE arasında değiştirir (ekran başına hatırlanır); durum rozetinde kullanılan
+taşıma `WS`, `SSE` ya da `SSE · yedek` olarak görünür.
+
 ## GET /api/stream
 
-Canlı ekranın Server-Sent Events akışı. Her saniye bir `snapshot` olayı:
+Canlı ekranın Server-Sent Events akışı (WebSocket'in yedeği). Her saniye bir `snapshot` olayı; içerik WebSocket'teki
+`snapshot` alanıyla aynıdır:
 
 ```json
 {
@@ -75,7 +93,7 @@ Canlı ekranın Server-Sent Events akışı. Her saniye bir `snapshot` olayı:
 ```
 
 `status`: `live` (taze veri) · `no-signal` (sürüş var, 15 sn veri yok) · `idle` (sürücü yok).
-`stale: true`: veritabanına ulaşılamadı, son bilinen görüntü. Akış 280 sn'de kapanır, `retry: 1000` ile istemci yeniden bağlanır.
+`stale: true`: veritabanına ulaşılamadı, son bilinen görüntü. SSE akışı 280 sn'de kapanır, `retry: 1000` ile istemci yeniden bağlanır; WebSocket koparsa 1-5 sn aralıkla yeniden denenir.
 
 ## GET /api/live
 
@@ -83,7 +101,7 @@ Aynı snapshot, tek seferlik JSON. `stale` ise `503`.
 
 ## GET /api/health
 
-`{ "ok": true, "storage": "mongodb" | "memory", "vehicles": 8, "latencyMs": 42 }` ya da `503`.
+`{ "ok": true, "storage": "mongodb" | "memory", "deployTarget": "vercel" | "node", "vehicles": 8, "latencyMs": 42 }` ya da `503`.
 
 ## Admin
 

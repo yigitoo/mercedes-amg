@@ -1,0 +1,37 @@
+# AMG Pulse VPS kurulumu: uygulama (Next.js + WebSocket) + Caddy (HTTPS).
+#   cd deploy && cp .env.example .env && $EDITOR .env
+#   docker compose up -d --build
+# Ayrıntılar: deploy/README.md
+
+services:
+  app:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?deploy/.env içinde DOMAIN tanımlı olmalı}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

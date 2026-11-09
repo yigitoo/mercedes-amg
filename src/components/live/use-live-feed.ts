@@ -10,6 +10,8 @@ const HISTORY_LENGTH = 120;
 const STALE_AFTER_MS = 6_000;
 
 export type FeedStatus = "connecting" | "live" | "degraded" | "offline";
+/** Canlı akışın taşıması: WebSocket (/api/ws) ya da Server-Sent Events (/api/stream). */
+export type Transport = "ws" | "sse";
 
 /** Bir araçta sürüş bitti (sürücü indi ya da değişti). Bitiş bayrağı ve yayın bandı bunu dinler. */
 export interface Departure {
@@ -53,6 +55,8 @@ export interface LiveFeed {
   samplesPerMinute: number;
   /** Her snapshot'ta bir artar; akış göstergesinin ritmi. */
   tick: number;
+  /** O an kullanılan taşıma (WebSocket açılamazsa tercih "ws" iken bile "sse" olur). */
+  transport: Transport;
 }
 
 const MAX_ARRIVALS = 20;
@@ -65,11 +69,15 @@ interface HistoryEntry {
 }
 
 /**
- * /api/stream'e bağlanır ve her saniye gelen snapshot'ı tutar.
- * EventSource kopan bağlantıyı kendiliğinden yeniden kurar (sunucu `retry` süresiyle); burada yalnızca
- * durum izlenir ve snapshot uzun süre gelmezse ekrana "bağlantı yok" yansıtılır.
+ * Canlı akışa bağlanır (tercihe göre WebSocket ya da SSE, bkz. connectLive) ve her saniye gelen snapshot'ı tutar.
+ * Bağlantı kendiliğinden yeniden kurulur; burada yalnızca durum izlenir ve snapshot uzun süre gelmezse ekrana
+ * "bağlantı yok" yansıtılır.
  */
-export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<VehicleId, HeartRateSample[]> = {}): LiveFeed {
+export function useLiveFeed(
+  initial: LiveSnapshot,
+  initialHistory: Record<VehicleId, HeartRateSample[]> = {},
+  preferred: Transport = "ws",
+): LiveFeed {
   const [snapshot, setSnapshot] = useState(initial);
   const [status, setStatus] = useState<FeedStatus>("connecting");
   // Açılış izi sunucudan gelir; sonrası akıştan büyür. Ref ve state aynı tohumdan kurulur.
@@ -82,16 +90,20 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
   // Araç başına son görülen durum: biniş/iniş farkı ve bitiş özeti buradan çıkarılır.
   const knownRef = useRef(new Map(initial.vehicles.map((v) => [v.id, v])));
   const sampleTimesRef = useRef<number[]>([]);
+  const latestGeneratedAtRef = useRef(initial.generatedAt);
   const [samplesPerMinute, setSamplesPerMinute] = useState(0);
   const [tick, setTick] = useState(0);
+  const [transport, setTransport] = useState<Transport>(preferred);
 
   useEffect(() => {
     lastMessageAt.current = Date.now();
-    const source = new EventSource("/api/stream");
 
-    source.addEventListener("snapshot", (event) => {
-      const next = JSON.parse((event as MessageEvent<string>).data) as LiveSnapshot;
+    const onSnapshot = (next: LiveSnapshot) => {
       lastMessageAt.current = Date.now();
+      // Sayfanın ilk görüntüsünden ya da son gelenden eski snapshot (yeniden bağlanma, sunucu önbelleği) geri sarmasın:
+      // eski sürücü "yeniden binmiş" gibi sahte iniş/biniş üretirdi.
+      if (next.generatedAt < latestGeneratedAtRef.current) return;
+      latestGeneratedAtRef.current = next.generatedAt;
       const now = Date.now();
       setSnapshot(next);
       setTick((t) => t + 1);
@@ -108,8 +120,10 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
       const changes = detectSessionChanges(knownRef.current, next, now);
       if (changes.departures.length) setDepartures((list) => [...list, ...changes.departures].slice(-MAX_ARRIVALS));
       if (changes.arrivals.length) setArrivals((list) => [...list, ...changes.arrivals].slice(-MAX_ARRIVALS));
-    });
-    source.addEventListener("error", () => setStatus((s) => (s === "live" ? "connecting" : s)));
+    };
+    const onDisconnect = () => setStatus((s) => (s === "live" ? "connecting" : s));
+
+    const connection = connectLive(preferred, onSnapshot, onDisconnect, setTransport);
 
     const watchdog = setInterval(() => {
       if (Date.now() - lastMessageAt.current > STALE_AFTER_MS) setStatus("offline");
@@ -117,11 +131,87 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
 
     return () => {
       clearInterval(watchdog);
-      source.close();
+      connection.close();
     };
-  }, []);
+  }, [preferred]); // mod değişince (M) eski bağlantı kapanır, yenisi kurulur
 
-  return { snapshot, history, status, arrivals, departures, samplesPerMinute, tick };
+  return { snapshot, history, status, arrivals, departures, samplesPerMinute, tick, transport };
+}
+
+/** WebSocket kopunca yeniden bağlanma beklemesi: 1 sn'den başlar, 5 sn'de sabitlenir. */
+const WS_RETRY_MIN_MS = 1_000;
+const WS_RETRY_MAX_MS = 5_000;
+/** WebSocket bu sürede açılamazsa bu sunucuda yok sayılır ve SSE'ye geçilir. */
+const WS_CONNECT_TIMEOUT_MS = 3_000;
+
+/**
+ * Canlı akış taşıması.
+ *   "ws":  `/api/ws` (WebSocket: server.mts ya da Vercel'de api/ws/route.ts). Hiç açılamazsa (ör. düz `next dev`) bu
+ *          bağlantı boyunca `/api/stream` (SSE) kullanılır. Açılmış WebSocket koparsa 1-5 sn aralıkla yeniden denenir.
+ *   "sse": doğrudan `/api/stream`. EventSource kopan bağlantıyı kendisi yeniden kurar.
+ * `onTransport` o an gerçekten kullanılan taşımayı bildirir.
+ */
+function connectLive(
+  preferred: Transport,
+  onSnapshot: (snapshot: LiveSnapshot) => void,
+  onDisconnect: () => void,
+  onTransport: (transport: Transport) => void,
+): { close(): void } {
+  let closed = false;
+  let socket: WebSocket | null = null;
+  let source: EventSource | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryMs = WS_RETRY_MIN_MS;
+  let everOpened = false;
+
+  const openSse = () => {
+    onTransport("sse");
+    source = new EventSource("/api/stream");
+    source.addEventListener("snapshot", (event) => onSnapshot(JSON.parse((event as MessageEvent<string>).data) as LiveSnapshot));
+    source.addEventListener("error", onDisconnect);
+  };
+
+  const openWebSocket = () => {
+    if (typeof WebSocket === "undefined") return openSse();
+    onTransport("ws");
+    const url = new URL("/api/ws", window.location.href);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(url);
+    socket = ws;
+    const connectTimer = setTimeout(() => ws.close(), WS_CONNECT_TIMEOUT_MS);
+
+    ws.addEventListener("open", () => {
+      clearTimeout(connectTimer);
+      everOpened = true;
+      retryMs = WS_RETRY_MIN_MS;
+    });
+    ws.addEventListener("message", (event) => {
+      if (typeof event.data !== "string") return;
+      const message = JSON.parse(event.data) as { type?: string; snapshot?: LiveSnapshot };
+      if (message.type === "snapshot" && message.snapshot) onSnapshot(message.snapshot);
+    });
+    ws.addEventListener("close", () => {
+      clearTimeout(connectTimer);
+      if (closed) return;
+      socket = null;
+      if (!everOpened) return openSse(); // bu sunucuda WebSocket yok: SSE yedeği
+      onDisconnect();
+      retryTimer = setTimeout(openWebSocket, retryMs);
+      retryMs = Math.min(retryMs * 2, WS_RETRY_MAX_MS);
+    });
+  };
+
+  if (preferred === "sse") openSse();
+  else openWebSocket();
+
+  return {
+    close() {
+      closed = true;
+      clearTimeout(retryTimer);
+      socket?.close();
+      source?.close();
+    },
+  };
 }
 
 function seedHistory(snapshot: LiveSnapshot, initial: Record<VehicleId, HeartRateSample[]>): Map<VehicleId, HistoryEntry> {
