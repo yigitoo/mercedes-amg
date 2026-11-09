@@ -20,7 +20,7 @@ const DESCRIPTION = `
 ![Mercedes-AMG](/brand/logos/mercedes-amg-lockup.svg)
 
 **Mercedes-AMG Araba Lansmanı**: test sürüşündeki 8 aracın sürücü nabzını canlı ekrana taşıyan sistemin API'si.
-Araçtaki nabız bilekliği ölçümü \`POST /api/ingest\`'e gönderir; canlı ekran WebSocket \`/api/ws\` (yedeği SSE \`GET /api/stream\`) ile saniyede bir günceller.
+Araçtaki nabız bilekliği ölçümü \`POST /api/ingest\`'e gönderir; canlı ekran WebSocket \`/api/ws\` ile saniyede bir günceller (OpenAPI WebSocket'i tanımlayamaz; mesaj biçimi docs/API.md'de).
 
 ## Akış
 
@@ -88,25 +88,11 @@ export function buildOpenApiDocument() {
           },
         },
       },
-      "/api/stream": {
-        get: {
-          tags: ["Canlı ekran"],
-          summary: "Canlı akış (Server-Sent Events, WebSocket yedeği)",
-          description:
-            "Asıl canlı akış WebSocket `/api/ws`'tir (Node sunucusu `server.mts`; OpenAPI WebSocket'i tanımlayamaz, bkz. docs/API.md): saniyede bir `{\"type\":\"snapshot\",\"snapshot\":...}` mesajı. Bu SSE uç noktası Vercel gibi WebSocket olmayan ortamlar için yedektir. Saniyede bir `snapshot` olayı. Veritabanına ulaşılamazsa akış kopmaz, `stale: true` ile son bilinen görüntü gelir. Akış 280 sn'de kapanır; `retry: 1000` ile tarayıcı yeniden bağlanır.",
-          responses: {
-            "200": {
-              description: "`event: snapshot` + `data: <LiveSnapshot JSON>`",
-              content: { "text/event-stream": { schema: { type: "string" }, example: 'event: snapshot\ndata: {"generatedAt":1794212400000,"stale":false,...}\n\n' } },
-            },
-          },
-        },
-      },
       "/api/live": {
         get: {
           tags: ["Canlı ekran"],
           summary: "Anlık görüntü (JSON)",
-          description: "Akışla aynı veri, tek seferlik. SSE kullanamayan istemciler için.",
+          description: "WebSocket `/api/ws` yayınıyla aynı veri, tek seferlik.",
           responses: {
             "200": { description: "Güncel görüntü", content: json(ref("LiveSnapshot")) },
             "503": { description: "Veritabanına ulaşılamadı; son bilinen görüntü (`stale: true`)", content: json(ref("LiveSnapshot")) },

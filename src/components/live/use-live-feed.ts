@@ -65,7 +65,7 @@ interface HistoryEntry {
 }
 
 /**
- * Canlı akışa bağlanır (önce WebSocket, olmazsa SSE; bkz. connectLive) ve her saniye gelen snapshot'ı tutar.
+ * Canlı akışa WebSocket ile bağlanır (bkz. connectLive) ve her saniye gelen snapshot'ı tutar.
  * Bağlantı kendiliğinden yeniden kurulur; burada yalnızca durum izlenir ve snapshot uzun süre gelmezse ekrana
  * "bağlantı yok" yansıtılır.
  */
@@ -127,30 +127,20 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
 /** WebSocket kopunca yeniden bağlanma beklemesi: 1 sn'den başlar, 5 sn'de sabitlenir. */
 const WS_RETRY_MIN_MS = 1_000;
 const WS_RETRY_MAX_MS = 5_000;
-/** El sıkışma bu sürede bitmezse WebSocket yok sayılır (bazı sunucular upgrade isteğini yanıtsız bırakır). */
-const WS_CONNECT_TIMEOUT_MS = 3_000;
+/** El sıkışma bu sürede bitmezse bağlantı bırakılıp yeniden denenir (asılı kalan proxy, uyanan TV). */
+const WS_CONNECT_TIMEOUT_MS = 5_000;
 
 /**
- * Canlı akış taşıması. Önce `/api/ws` (WebSocket, server.mts) denenir. Hiç açılamazsa — örneğin Vercel'de, orada
- * özel sunucu yoktur — sayfa ömrü boyunca `/api/stream` (SSE) kullanılır. Bir kez açılmış WebSocket koparsa
- * (sunucu yeniden başladı, Wi-Fi gitti) yeniden WebSocket denenir.
+ * `/api/ws` WebSocket bağlantısı (server.mts). Koparsa ya da hiç açılamazsa (sunucu yeniden başladı, Wi-Fi gitti)
+ * 1-5 sn aralıkla yeniden denenir; bu sürede ekran son bilinen değerlerle kalır.
  */
 function connectLive(onSnapshot: (snapshot: LiveSnapshot) => void, onDisconnect: () => void): { close(): void } {
   let closed = false;
   let socket: WebSocket | null = null;
-  let source: EventSource | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let retryMs = WS_RETRY_MIN_MS;
-  let everOpened = false;
 
-  const openSse = () => {
-    source = new EventSource("/api/stream");
-    source.addEventListener("snapshot", (event) => onSnapshot(JSON.parse((event as MessageEvent<string>).data) as LiveSnapshot));
-    source.addEventListener("error", onDisconnect);
-  };
-
-  const openWebSocket = () => {
-    if (typeof WebSocket === "undefined") return openSse();
+  const open = () => {
     const url = new URL("/api/ws", window.location.href);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(url);
@@ -159,7 +149,6 @@ function connectLive(onSnapshot: (snapshot: LiveSnapshot) => void, onDisconnect:
 
     ws.addEventListener("open", () => {
       clearTimeout(connectTimer);
-      everOpened = true;
       retryMs = WS_RETRY_MIN_MS;
     });
     ws.addEventListener("message", (event) => {
@@ -171,21 +160,19 @@ function connectLive(onSnapshot: (snapshot: LiveSnapshot) => void, onDisconnect:
       clearTimeout(connectTimer);
       if (closed) return;
       socket = null;
-      if (!everOpened) return openSse(); // bu sunucuda WebSocket yok
       onDisconnect();
-      retryTimer = setTimeout(openWebSocket, retryMs);
+      retryTimer = setTimeout(open, retryMs);
       retryMs = Math.min(retryMs * 2, WS_RETRY_MAX_MS);
     });
   };
 
-  openWebSocket();
+  open();
 
   return {
     close() {
       closed = true;
       clearTimeout(retryTimer);
       socket?.close();
-      source?.close();
     },
   };
 }

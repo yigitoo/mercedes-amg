@@ -7,8 +7,8 @@
  * Next.js route handler'ları WebSocket kabul edemediği için bağlantıyı bu süreç karşılar. Kaç ekran bağlı olursa olsun
  * sunucu saniyede TEK snapshot üretir (/api/live'ı süreç içinden okur) ve hepsine yayınlar; bağlı ekran yoksa durur.
  *
- * Vercel bu dosyayı çalıştırmaz (orada `next build` çıktısı fonksiyon olarak çalışır): /api/ws yoktur, istemci
- * bağlanamayınca /api/stream (SSE) akışına düşer. Bkz. src/components/live/use-live-feed.ts.
+ * Canlı ekran yalnız bu sunucuyla çalışır: Vercel gibi sunucusuz ortamlar bu dosyayı çalıştırmaz, orada /api/ws yoktur.
+ * İstemci tarafı: src/components/live/use-live-feed.ts.
  */
 import { createServer } from "node:http";
 

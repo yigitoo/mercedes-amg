@@ -54,7 +54,7 @@ curl -X POST https://<alan-adı>/api/ingest \
 
 ## WS /api/ws
 
-Canlı ekranın WebSocket akışı (`server.mts` ile çalışırken: `pnpm dev`, `pnpm start`, `mercedesctl up`). Her saniye
+Canlı ekranın WebSocket akışı (`server.mts`: `pnpm dev`, `pnpm start`, `mercedesctl up`; sunucusuz ortamlarda yoktur). Her saniye
 bir metin mesajı: `{"type":"snapshot","snapshot":<LiveSnapshot>}`; yeni bağlanan istemci son görüntüyü hemen alır.
 Sunucu 15 sn'de bir ping gönderir, pong vermeyen bağlantıyı kapatır. İstemciden mesaj beklenmez.
 
@@ -63,13 +63,7 @@ const ws = new WebSocket("wss://<alan-adı>/api/ws");
 ws.onmessage = (e) => { const { type, snapshot } = JSON.parse(e.data); /* type === "snapshot" */ };
 ```
 
-Vercel'de özel sunucu çalışmadığı için bu uç nokta yoktur; canlı ekran 3 sn içinde bağlanamazsa `GET /api/stream`'e
-geçer.
-
-## GET /api/stream
-
-Canlı ekranın Server-Sent Events akışı (WebSocket'in yedeği). Her saniye bir `snapshot` olayı; içerik WebSocket'teki
-`snapshot` alanıyla aynıdır:
+`snapshot` alanı:
 
 ```json
 {
@@ -90,7 +84,7 @@ Canlı ekranın Server-Sent Events akışı (WebSocket'in yedeği). Her saniye b
 ```
 
 `status`: `live` (taze veri) · `no-signal` (sürüş var, 15 sn veri yok) · `idle` (sürücü yok).
-`stale: true`: veritabanına ulaşılamadı, son bilinen görüntü. Akış 280 sn'de kapanır, `retry: 1000` ile istemci yeniden bağlanır.
+`stale: true`: veritabanına ulaşılamadı, son bilinen görüntü. Bağlantı koparsa canlı ekran 1-5 sn aralıkla yeniden bağlanır.
 
 ## GET /api/live
 
