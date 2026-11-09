@@ -11,6 +11,9 @@ const { app, BrowserWindow, Menu, shell } = require("electron");
 const path = require("node:path");
 
 const BASE_URL = (process.env.AMG_URL || "http://localhost:3000").replace(/\/+$/, "");
+
+// Lansman açılışındaki motor sesi, kimse ekrana dokunmadan da çalsın (TV/kiosk).
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 const KIOSK = process.argv.includes("--kiosk");
 const RETRY_MS = 5000;
 

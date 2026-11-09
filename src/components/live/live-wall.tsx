@@ -1,14 +1,17 @@
 "use client";
 
 import { SidebarSimpleIcon } from "@phosphor-icons/react";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import type { HeartRateSample, LiveSnapshot, VehicleId } from "@/domain/types";
 import { AmgLogo, MercedesBenzLockup } from "@/components/brand/logos";
 import { cn } from "@/lib/cn";
 import { formatDate, formatTime } from "@/lib/format";
 import { useStoredState } from "@/lib/use-stored-state";
-import { ArrivalBanner } from "./arrival-banner";
+import { LaunchIntro, OVERLAY_FADE } from "./launch-intro";
+import { RaceBanner } from "./race-banner";
+import { FINISH_MS } from "./race-timing";
 import { FullscreenToggle } from "./fullscreen";
 import { TimingTower } from "./timing-tower";
 import { useLiveFeed, type FeedStatus } from "./use-live-feed";
@@ -20,9 +23,20 @@ import { VehicleTile } from "./vehicle-tile";
  *   Tablet: 2 sütun, mobil: tek sütun; sıralama kulesi gizlenir (kartlar zaten görünür).
  */
 export function LiveWall({ initial, initialHistory }: { initial: LiveSnapshot; initialHistory: Record<VehicleId, HeartRateSample[]> }) {
-  const { snapshot, history, status, arrivals, samplesPerMinute, tick } = useLiveFeed(initial, initialHistory);
-  // Araç başına, şu anki sürüşe ait varış anı (sürücü değişince yenisi geçerli olur).
-  const arrivedAt = new Map(arrivals.map((a) => [a.key, a.at]));
+  const { snapshot, history, status, arrivals, departures, samplesPerMinute, tick } = useLiveFeed(initial, initialHistory);
+  // Lansman açılışı bitmeden ekran görünmez; yıldız büyürken yumuşakça netleşerek gelir.
+  const [revealed, setRevealed] = useState(false);
+  const reduceMotion = useReducedMotion();
+  // Araç başına son biten sürüş (bitiş bayrağı) ve şu anki sürüşe ait varış anı.
+  const finishedBy = new Map(departures.map((d) => [d.vehicleId, d]));
+  // Bitiş bayrağı sürerken gelen biniş (sürücü değişimi), bayrak bitince başlar; ikisi üst üste binmez.
+  const arrivedAt = new Map(
+    arrivals.map((a) => {
+      const finish = finishedBy.get(a.vehicleId);
+      const overlaps = finish != null && a.at >= finish.at && a.at < finish.at + FINISH_MS;
+      return [a.key, overlaps ? finish.at + FINISH_MS : a.at];
+    }),
+  );
   const [tower, setTower] = useStoredState<"open" | "closed">("amg.tower.visible", "open", ["open", "closed"]);
   const towerOpen = tower === "open";
   const toggleTower = () => setTower(towerOpen ? "closed" : "open");
@@ -42,63 +56,75 @@ export function LiveWall({ initial, initialHistory }: { initial: LiveSnapshot; i
   }, [setTower]);
 
   return (
-    <div className="live-screen carbon flex min-h-[100dvh] flex-col gap-4 p-4 xl:h-[100dvh] xl:gap-5 xl:p-6 [--carbon-opacity:0.025]">
-      <header className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <MercedesBenzLockup className="text-lg xl:text-xl" />
-        <span className="hidden h-10 w-px bg-line-strong sm:block" aria-hidden />
-        <div className="mr-auto">
-          <h1 className="font-title text-xl leading-none font-bold xl:text-2xl">{snapshot.settings.title}</h1>
-          {snapshot.settings.subtitle && <p className="mt-1.5 text-sm text-muted">{snapshot.settings.subtitle}</p>}
-        </div>
-        <FeedIndicator status={status} samplesPerMinute={samplesPerMinute} tick={tick} />
-        <button
-          type="button"
-          onClick={toggleTower}
-          aria-pressed={towerOpen}
-          aria-label={towerOpen ? "Sıralamayı gizle (S)" : "Sıralamayı göster (S)"}
-          title={towerOpen ? "Sıralamayı gizle (S)" : "Sıralamayı göster (S)"}
+    <div className="live-screen carbon relative min-h-[100dvh] xl:h-[100dvh] [--carbon-opacity:0.025]">
+      <motion.div
+        className="flex min-h-[100dvh] flex-col gap-4 p-4 xl:h-full xl:gap-5 xl:p-6"
+        initial={false}
+        animate={revealed ? { opacity: 1, scale: 1, filter: "blur(0px)" } : { opacity: 0, scale: reduceMotion ? 1 : 0.97, filter: reduceMotion ? "blur(0px)" : "blur(12px)" }}
+        // Açılış kaplamasıyla aynı anda başlar, biraz daha uzun sürer: ekran kaplamanın altından netleşerek çıkar.
+        transition={{ duration: 1.8, delay: revealed ? OVERLAY_FADE.delayMs / 1000 : 0, ease: [0.4, 0, 0.2, 1] }}
+      >
+        <header className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <MercedesBenzLockup className="text-lg xl:text-xl" />
+          <span className="hidden h-10 w-px bg-line-strong sm:block" aria-hidden />
+          <div className="mr-auto">
+            <h1 className="font-title text-xl leading-none font-bold xl:text-2xl">{snapshot.settings.title}</h1>
+            {snapshot.settings.subtitle && <p className="mt-1.5 text-sm text-muted">{snapshot.settings.subtitle}</p>}
+          </div>
+          <FeedIndicator status={status} samplesPerMinute={samplesPerMinute} tick={tick} />
+          <button
+            type="button"
+            onClick={toggleTower}
+            aria-pressed={towerOpen}
+            aria-label={towerOpen ? "Sıralamayı gizle (S)" : "Sıralamayı göster (S)"}
+            title={towerOpen ? "Sıralamayı gizle (S)" : "Sıralamayı göster (S)"}
+            className={cn(
+              "hidden size-9 cursor-pointer place-items-center rounded-sm border transition-colors xl:grid",
+              towerOpen ? "border-line-strong text-soft hover:border-soft hover:text-fg" : "border-fg bg-fg text-ink",
+            )}
+          >
+            <SidebarSimpleIcon size={18} mirrored />
+          </button>
+          <FullscreenToggle />
+          <Clock />
+        </header>
+
+        {/* Kule kapanınca sütunu sıfıra iner, panel ızgarası tüm genişliğe büyür (geçiş animasyonlu). */}
+        <main
           className={cn(
-            "hidden size-9 cursor-pointer place-items-center rounded-sm border transition-colors xl:grid",
-            towerOpen ? "border-line-strong text-soft hover:border-soft hover:text-fg" : "border-fg bg-fg text-ink",
+            "grid min-h-0 flex-1 gap-4 transition-[grid-template-columns,column-gap] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] xl:gap-5",
+            towerOpen ? "xl:grid-cols-[1fr_20rem] 2xl:grid-cols-[1fr_22rem]" : "xl:grid-cols-[1fr_0rem] xl:gap-x-0",
           )}
         >
-          <SidebarSimpleIcon size={18} mirrored />
-        </button>
-        <FullscreenToggle />
-        <Clock />
-      </header>
+          {/* Kokpit ızgarası: paneller arası 1px saç çizgisi (zemin rengi boşluktan görünür). */}
+          <div className="grid min-h-0 grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line sm:grid-cols-2 xl:grid-cols-4 xl:grid-rows-2">
+            {snapshot.vehicles.map((vehicle) => (
+              <VehicleTile
+                key={vehicle.id}
+                vehicle={vehicle}
+                history={history[vehicle.id] ?? []}
+                now={snapshot.generatedAt}
+                gauge={snapshot.settings.gauge}
+                arrivedAt={arrivedAt.get(`${vehicle.id}:${vehicle.sessionStartedAt}`) ?? null}
+                finished={finishedBy.get(vehicle.id) ?? null}
+              />
+            ))}
+          </div>
+          <div className={cn("hidden min-h-0 overflow-hidden transition-opacity duration-300 xl:flex xl:flex-col", !towerOpen && "opacity-0")} aria-hidden={!towerOpen}>
+            <TimingTower vehicles={snapshot.vehicles} />
+          </div>
+        </main>
 
-      {/* Kule kapanınca sütunu sıfıra iner, panel ızgarası tüm genişliğe büyür (geçiş animasyonlu). */}
-      <main
-        className={cn(
-          "grid min-h-0 flex-1 gap-4 transition-[grid-template-columns,column-gap] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] xl:gap-5",
-          towerOpen ? "xl:grid-cols-[1fr_20rem] 2xl:grid-cols-[1fr_22rem]" : "xl:grid-cols-[1fr_0rem] xl:gap-x-0",
-        )}
-      >
-        {/* Kokpit ızgarası: paneller arası 1px saç çizgisi (zemin rengi boşluktan görünür). */}
-        <div className="grid min-h-0 grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line sm:grid-cols-2 xl:grid-cols-4 xl:grid-rows-2">
-          {snapshot.vehicles.map((vehicle) => (
-            <VehicleTile
-              key={vehicle.id}
-              vehicle={vehicle}
-              history={history[vehicle.id] ?? []}
-              now={snapshot.generatedAt}
-              gauge={snapshot.settings.gauge}
-              arrivedAt={arrivedAt.get(`${vehicle.id}:${vehicle.sessionStartedAt}`) ?? null}
-            />
-          ))}
-        </div>
-        <div className={cn("hidden min-h-0 overflow-hidden transition-opacity duration-300 xl:flex xl:flex-col", !towerOpen && "opacity-0")} aria-hidden={!towerOpen}>
-          <TimingTower vehicles={snapshot.vehicles} />
-        </div>
-      </main>
 
-      <ArrivalBanner arrivals={arrivals} />
 
-      <footer className="flex items-center justify-between gap-6">
-        <span className="font-title text-sm font-bold tracking-[0.16em] text-soft">{snapshot.settings.tagline}</span>
-        <AmgLogo className="h-4 w-auto text-fg xl:h-5" />
-      </footer>
+        <footer className="flex items-center justify-between gap-6">
+          <span className="font-title text-sm font-bold tracking-[0.16em] text-soft">{snapshot.settings.tagline}</span>
+          <AmgLogo className="h-4 w-auto text-fg xl:h-5" />
+        </footer>
+      </motion.div>
+
+      <RaceBanner arrivals={arrivals} departures={departures} />
+      <LaunchIntro onReveal={() => setRevealed(true)} />
     </div>
   );
 }

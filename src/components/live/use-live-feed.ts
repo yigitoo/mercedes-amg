@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { Driver, HeartRateSample, LiveSnapshot, VehicleId } from "@/domain/types";
+import type { Driver, HeartRateSample, LiveSnapshot, LiveVehicle, VehicleId } from "@/domain/types";
 
 /** Sparkline'da tutulan son ölçüm sayısı (1 Hz'de ~2 dakika). */
 const HISTORY_LENGTH = 120;
@@ -10,6 +10,22 @@ const HISTORY_LENGTH = 120;
 const STALE_AFTER_MS = 6_000;
 
 export type FeedStatus = "connecting" | "live" | "degraded" | "offline";
+
+/** Bir araçta sürüş bitti (sürücü indi ya da değişti). Bitiş bayrağı ve yayın bandı bunu dinler. */
+export interface Departure {
+  /** Sürüş başına tekil. */
+  key: string;
+  vehicleId: VehicleId;
+  slot: number;
+  plate: string;
+  model: string;
+  driver: Driver;
+  /** Bitiş anındaki sürüş özeti (son bilinen değerler). */
+  durationMs: number;
+  avg: number | null;
+  max: number | null;
+  at: number;
+}
 
 /** Bir araca yeni sürücü bindi (ekran açıkken). Kontak animasyonu ve yayın bandı bunu dinler. */
 export interface Arrival {
@@ -31,6 +47,8 @@ export interface LiveFeed {
   status: FeedStatus;
   /** Ekran açıldıktan sonraki sürücü gelişleri, en yeni sonda. */
   arrivals: Arrival[];
+  /** Ekran açıldıktan sonra biten sürüşler, en yeni sonda. */
+  departures: Departure[];
   /** Son 60 saniyede gelen ölçüm sayısı (veri akışı göstergesi). */
   samplesPerMinute: number;
   /** Her snapshot'ta bir artar; akış göstergesinin ritmi. */
@@ -60,7 +78,9 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
   const [history, setHistory] = useState<Record<VehicleId, number[]>>(() => valuesOf(seed));
   const lastMessageAt = useRef(0);
   const [arrivals, setArrivals] = useState<Arrival[]>([]);
-  const sessionsRef = useRef(new Map(initial.vehicles.map((v) => [v.id, v.sessionStartedAt])));
+  const [departures, setDepartures] = useState<Departure[]>([]);
+  // Araç başına son görülen durum: biniş/iniş farkı ve bitiş özeti buradan çıkarılır.
+  const knownRef = useRef(new Map(initial.vehicles.map((v) => [v.id, v])));
   const sampleTimesRef = useRef<number[]>([]);
   const [samplesPerMinute, setSamplesPerMinute] = useState(0);
   const [tick, setTick] = useState(0);
@@ -85,8 +105,9 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
       while (times.length && now - times[0]! > 60_000) times.shift();
       setSamplesPerMinute(times.length);
 
-      const fresh = detectArrivals(sessionsRef.current, next, now);
-      if (fresh.length) setArrivals((list) => [...list, ...fresh].slice(-MAX_ARRIVALS));
+      const changes = detectSessionChanges(knownRef.current, next, now);
+      if (changes.departures.length) setDepartures((list) => [...list, ...changes.departures].slice(-MAX_ARRIVALS));
+      if (changes.arrivals.length) setArrivals((list) => [...list, ...changes.arrivals].slice(-MAX_ARRIVALS));
     });
     source.addEventListener("error", () => setStatus((s) => (s === "live" ? "connecting" : s)));
 
@@ -100,7 +121,7 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
     };
   }, []);
 
-  return { snapshot, history, status, arrivals, samplesPerMinute, tick };
+  return { snapshot, history, status, arrivals, departures, samplesPerMinute, tick };
 }
 
 function seedHistory(snapshot: LiveSnapshot, initial: Record<VehicleId, HeartRateSample[]>): Map<VehicleId, HistoryEntry> {
@@ -120,17 +141,37 @@ function valuesOf(store: Map<VehicleId, HistoryEntry>): Record<VehicleId, number
   return Object.fromEntries([...store].map(([id, entry]) => [id, entry.values]));
 }
 
-/** Sürüş başlangıcı değişen ve sürücüsü olan araçlar = yeni biniş. Bilinen durum her çağrıda güncellenir. */
-function detectArrivals(known: Map<VehicleId, number | null>, snapshot: LiveSnapshot, now: number): Arrival[] {
+/**
+ * Sürüş başlangıcı değişen araçlar: önceki sürüş bittiyse iniş, yeni sürücü varsa biniş.
+ * Sürücü değiştirildiğinde ikisi birden üretilir (önce iniş). Bilinen durum her çağrıda güncellenir.
+ */
+function detectSessionChanges(known: Map<VehicleId, LiveVehicle>, snapshot: LiveSnapshot, now: number) {
   const arrivals: Arrival[] = [];
+  const departures: Departure[] = [];
   for (const v of snapshot.vehicles) {
     const previous = known.get(v.id);
-    known.set(v.id, v.sessionStartedAt);
-    if (v.driver && v.sessionStartedAt != null && v.sessionStartedAt !== previous) {
+    known.set(v.id, v);
+    if (!previous || v.sessionStartedAt === previous.sessionStartedAt) continue;
+
+    if (previous.driver && previous.sessionStartedAt != null) {
+      departures.push({
+        key: `${v.id}:${previous.sessionStartedAt}:end`,
+        vehicleId: v.id,
+        slot: v.slot,
+        plate: previous.plate,
+        model: previous.model,
+        driver: previous.driver,
+        durationMs: now - previous.sessionStartedAt,
+        avg: previous.stats?.avg ?? null,
+        max: previous.stats?.max ?? null,
+        at: now,
+      });
+    }
+    if (v.driver && v.sessionStartedAt != null) {
       arrivals.push({ key: `${v.id}:${v.sessionStartedAt}`, vehicleId: v.id, slot: v.slot, plate: v.plate, model: v.model, driver: v.driver, at: now });
     }
   }
-  return arrivals;
+  return { arrivals, departures };
 }
 
 function appendHistory(store: Map<VehicleId, HistoryEntry>, snapshot: LiveSnapshot): { values: Record<VehicleId, number[]>; added: number } {

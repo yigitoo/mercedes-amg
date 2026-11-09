@@ -86,6 +86,58 @@
     }
   }
 
+  /* Bitiş bayrağı: dilimler sırayla dalgalanır (kumaş rüzgârda). */
+  @keyframes flag-wave {
+    0%,
+    100% {
+      transform: translateY(0) skewY(0deg);
+      filter: brightness(1);
+    }
+    50% {
+      transform: translateY(-7%) skewY(-4deg);
+      filter: brightness(0.72);
+    }
+  }
+
+  /* Bitiş bayrağı yukarıdan iner, hafif sallanarak oturur. */
+  @keyframes flag-drop {
+    0% {
+      transform: translateY(-140%) rotate(-8deg);
+      opacity: 0;
+    }
+    60% {
+      transform: translateY(6%) rotate(2deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+  }
+
+  @keyframes overlay-life {
+    0% {
+      opacity: 0;
+    }
+    8%,
+    88% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* Yeni sürücü: panelin çevresinde kırmızı ışık tur atar. */
+  @keyframes perimeter-run {
+    from {
+      stroke-dashoffset: 100;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
   /* Her yeni ölçümde iz ucundaki noktadan halka yayılır. */
   @keyframes data-ping {
     0% {

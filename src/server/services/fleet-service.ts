@@ -46,8 +46,10 @@ export async function assignDriver(vehicleId: VehicleId, driver: Driver, started
     throw new DomainError("Başlangıç saati, devam eden sürüşün başlangıcından önce olamaz.", "startedAt");
   }
 
-  await Promise.all(running.map((s) => repo.endSession(s.id, startedAt)));
+  // Önce yeni sürüş açılır, sonra eskisi kapanır: arada okuyan canlı ekran aracı hiçbir an "boş" görmez
+  // (aynı anda iki aktif sürüş görülürse en yenisi seçilir, bkz. latestActiveByVehicle).
   const session = await repo.createSession({ vehicleId, plate: vehicle.plate, driver, startedAt });
+  await Promise.all(running.map((s) => repo.endSession(s.id, startedAt)));
 
   const previous = running.map((s) => fullName(s.driver)).join(", ");
   await recordAudit({

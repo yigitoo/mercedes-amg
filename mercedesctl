@@ -193,6 +193,18 @@ cmd_ingest_test() {
   esac
 }
 
+# Promo kaydı: canlı ekran kaydedilirken arkada admin işlemlerini sırayla oynatır (scripts/promo.mts).
+cmd_promo() {
+  local target="${1:-$URL}"
+  title "promo senaryosu → $target"
+  [ "$target" = "$URL" ] && ! is_running web && die "web çalışmıyor: $CLI up"
+  is_running sim || [ "$target" != "$URL" ] || { warn "simülatör kapalı, açılıyor (canlı veri aksın)"; cmd_sim; }
+  warn "Senaryo veritabanına yazar (sürücü atar, sürüş bitirir); aynı veritabanını kullanan canlı ortam da etkilenir."
+  info "Kayıt: canlı ekranı tam ekran aç (F), kayda başla; geri sayım 5 sn."
+  confirm "Başlatılsın mı?" || { info "vazgeçildi"; return 0; }
+  AMG_URL="$target" ADMIN_PASSWORD="$(env_get ADMIN_PASSWORD)" INGEST_KEY="$(env_get INGEST_KEY)" node scripts/promo.mts
+}
+
 # ============================================================================
 #  KALİTE
 # ============================================================================
@@ -270,6 +282,7 @@ cmd_help() {
   row "status | logs [ad]" "ne çalışıyor + /api/health · canlı log (web | sim | desktop)"
   row "open [hedef]" "live · admin · logs"
   row "ingest:test [url]" "ingest uç noktasını bileklik gibi dener (anahtar + eşleşme)"
+  row "promo [url]" "video kaydı için senaryo: bitiş bayrakları, tanıtımlar, kırmızı bölge, gösterge (~95 sn)"
 
   printf '\n%s\n' "${h}Masaüstü${z}"
   row "desktop [url]" "Electron penceresi; varsayılan $URL"
@@ -291,7 +304,7 @@ cmd_help() {
 # ============================================================================
 #  YÖNLENDİRME
 # ============================================================================
-COMMANDS=(up down restart web sim status logs open ingest:test desktop kiosk check build clean db:reset setup deploy doctor help)
+COMMANDS=(up down restart web sim status logs open ingest:test promo desktop kiosk check build clean db:reset setup deploy doctor help)
 command="${1:-help}"
 [ $# -gt 0 ] && shift
 case "$command" in
@@ -304,6 +317,7 @@ case "$command" in
   deploy) cmd_deploy "${1:-}" ;;
   ingest:test) cmd_ingest_test "${1:-}" ;;
   db:reset) cmd_db_reset ;;
+  promo) cmd_promo "${1:-}" ;;
   -h | --help) cmd_help ;;
   *)
     fail "bilinmeyen komut: $command"

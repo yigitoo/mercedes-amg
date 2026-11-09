@@ -1,11 +1,11 @@
-import { isAdmin } from "@/server/auth";
+import { isAdminRequest } from "@/server/auth";
 import { csvResponse, internalError, jsonError } from "@/server/http";
 import { getFleetReport } from "@/server/services/report-service";
 import { formatDateTime, formatDuration, fullName } from "@/lib/format";
 
 /** GET /api/admin/reports/csv — iş bitimi toplam rapor: plaka başına tüm sürüşler, tek tablo. */
-export async function GET() {
-  if (!(await isAdmin())) return jsonError(401, "unauthorized");
+export async function GET(request: Request) {
+  if (!(await isAdminRequest(request))) return jsonError(401, "unauthorized");
   try {
     const report = await getFleetReport();
     const header = ["Araç", "Plaka", "Model", "Sürücü", "Başlangıç", "Bitiş", "Süre", "Ölçüm", "Ort. BPM", "Min BPM", "Maks BPM"];

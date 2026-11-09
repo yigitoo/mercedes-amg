@@ -85,7 +85,18 @@ Aynı snapshot, tek seferlik JSON. `stale` ise `503`.
 
 `{ "ok": true, "storage": "mongodb" | "memory", "vehicles": 8, "latencyMs": 42 }` ya da `503`.
 
-## Admin (oturum çerezi gerekir)
+## Admin
+
+Yetki: tarayıcıda admin oturum çerezi ya da otomasyonda `X-Admin-Key: <ADMIN_PASSWORD>`. Etkileşimli doküman: `/docs` (Scalar).
+
+| Uç nokta | Açıklama |
+| --- | --- |
+| `POST /api/admin/drivers` | Araca sürücü ata (önceki sürüş kapanır): `{ "vehicleId": "v6", "firstName": "Defne", "lastName": "Arıkan" }` |
+| `POST /api/admin/sessions/end` | Sürüşü bitir: `{ "vehicleId": "v6" }` |
+| `PUT /api/admin/settings` | Canlı ekran ayarları; verilmeyen alan korunur: `{ "title", "subtitle", "tagline", "gauge": "bar" \| "dial" }` |
+| `GET /api/admin/export?kind=readings\|audit&cursor=` | Tüm loglar, 5.000'lik parçalar |
+
+### Dosya indirme
 
 | Uç nokta | Açıklama |
 | --- | --- |

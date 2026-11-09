@@ -1,4 +1,4 @@
-import { isAdmin } from "@/server/auth";
+import { isAdminRequest } from "@/server/auth";
 import { internalError, jsonError, NO_STORE } from "@/server/http";
 import { EXPORT_KINDS, getExportPage, type ExportKind } from "@/server/services/log-service";
 
@@ -8,7 +8,7 @@ import { EXPORT_KINDS, getExportPage, type ExportKind } from "@/server/services/
  * böylece tek bir istek büyük veride zaman aşımına düşmez ve ilerleme gösterilebilir.
  */
 export async function GET(request: Request) {
-  if (!(await isAdmin())) return jsonError(401, "unauthorized");
+  if (!(await isAdminRequest(request))) return jsonError(401, "unauthorized");
   const url = new URL(request.url);
   const kind = url.searchParams.get("kind") as ExportKind;
   if (!EXPORT_KINDS.includes(kind)) return jsonError(400, "invalid_kind", { allowed: EXPORT_KINDS });

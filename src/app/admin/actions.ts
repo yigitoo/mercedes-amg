@@ -64,7 +64,8 @@ export async function login(_prev: ActionState, form: FormData): Promise<ActionS
 
   const next = text(form, "next");
   // Yalnız site içi yollara dön; açık yönlendirme (open redirect) olmasın.
-  redirect(next.startsWith("/admin") && !next.startsWith("//") ? next : "/admin");
+  const safe = (next.startsWith("/admin") || next === "/docs") && !next.startsWith("//");
+  redirect(safe ? next : "/admin");
 }
 
 export async function logout(): Promise<void> {

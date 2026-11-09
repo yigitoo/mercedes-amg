@@ -1,12 +1,12 @@
 import { zoneOf } from "@/domain/heart-rate";
-import { isAdmin } from "@/server/auth";
+import { isAdminRequest } from "@/server/auth";
 import { csvResponse, internalError, jsonError } from "@/server/http";
 import { getSessionReadings } from "@/server/services/report-service";
 import { formatTimeWithSeconds, fullName } from "@/lib/format";
 
 /** GET /api/admin/sessions/:sessionId/csv — bir sürüşün saniye saniye ham nabız kaydı. */
-export async function GET(_request: Request, ctx: RouteContext<"/api/admin/sessions/[sessionId]/csv">) {
-  if (!(await isAdmin())) return jsonError(401, "unauthorized");
+export async function GET(request: Request, ctx: RouteContext<"/api/admin/sessions/[sessionId]/csv">) {
+  if (!(await isAdminRequest(request))) return jsonError(401, "unauthorized");
   const { sessionId } = await ctx.params;
   try {
     const data = await getSessionReadings(sessionId);

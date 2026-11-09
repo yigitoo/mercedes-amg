@@ -56,6 +56,16 @@ export async function isAdmin(): Promise<boolean> {
   return verifyAdminToken(store.get(ADMIN_COOKIE)?.value);
 }
 
+/**
+ * API yetkisi: tarayıcıdan oturum çerezi ya da otomasyondan (promo betiği, entegrasyon) `X-Admin-Key: <ADMIN_PASSWORD>`.
+ * Anahtar sabit zamanlı karşılaştırılır (imzalanıp kıyaslanır, uzunluk bilgisi de sızmaz).
+ */
+export async function isAdminRequest(request: Request): Promise<boolean> {
+  const key = request.headers.get("x-admin-key");
+  if (key) return checkAdminPassword(key);
+  return isAdmin();
+}
+
 /** Server action'ların ilk satırı. Proxy zaten yönlendirir; bu ikinci kilit doğrudan POST'lara karşı. */
 export async function requireAdmin(): Promise<void> {
   if (!(await isAdmin())) throw new Error("Yetkisiz: önce admin girişi yapın.");

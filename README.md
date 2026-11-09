@@ -34,6 +34,7 @@
 | --- | --- | --- |
 | **Canlı ekran** | `/` | Garajdaki 65" TV ve link verilen herkes. 8 aracın nabzı, devir kadranı/barı, son 2 dakikanın izi, nabza ya da araç numarasına göre sıralama kulesi. Giriş gerekmez. |
 | **Admin paneli** | `/admin` | Etkinlik ekibi (tek ortak şifre). Genel bakış, Sürücüler (ata / değiştir / adı düzelt / bitir), Biniş kayıtları, Araçlar (plaka, model), Raporlar, Kayıtlar (denetim), Ekran ayarları (başlıklar, kadran ya da bar göstergesi). Masaüstünde sidebar, mobilde alt sekme çubuğu. |
+| **API dokümanı** | `/docs` | Scalar ile, Mercedes-AMG temalı (admin girişi gerekir). Sözleşme `GET /api/openapi.json`; sınırlar koddaki sabitlerden üretilir. |
 | **Ingest API** | `POST /api/ingest` | Araçlardaki nabız bileklikleri. Ölçülen nabzı kimliğiyle gönderir. |
 | **Simülatör** | `simulator/` | Gerçek cihazlar yokken 8 bilekliği taklit eder; ingest API'ye gerçek cihazlarla aynı biçimde veri yollar. |
 | **Masaüstü uygulaması** | `desktop/` | TV'ye bağlı bilgisayar için kiosk penceresi (Electron). Sunucu düşerse kendini toparlar. |
@@ -53,6 +54,17 @@ saniye akıtır; **Dışa aktar** tüm nabız ve işlem kayıtlarını CSV olara
 çekilir, ilerleme marka yükleme çubuğunda görünür, iptal edilebilir.
 
 Canlı ekranda tam ekran: başlıktaki düğme ya da `F`. Tam ekranda imleç 3 sn hareketsiz kalınca gizlenir.
+
+**Lansman açılışı.** Canlı ekran açılınca: Mercedes-Benz kilidi ve "Lansmana hoş geldiniz"; AMG logosu yükleme çubuğu
+olarak 0→100 km/s sayacıyla tam 2,7 sn'de dolar (aracın 0-100 süresi), yıldız ekranın ortasına gelip dönerek büyür ve
+canlı ekran açılır. Elektrikli motor sesi Web Audio ile sentezlenir (dosya yok) ve dolumla senkron yükselir.
+Tarayıcılar etkileşimsiz sese izin vermez: izin yoksa açılış "Başlatmak için dokunun · Enter" ile bekler, ses ilk
+dokunuşla garanti çalar. Masaüstü/kiosk uygulamasında ses izni açıktır. TV tarayıcısında beklemeden sesli açmak için
+Chrome'u `--autoplay-policy=no-user-gesture-required` ile başlatın. `?intro=off` açılışı atlar, `Esc` geçer.
+
+**Sürüş bitişi.** Sürücü inince ya da sürüş bitince panelin üstüne dalgalanan damalı bayrak iner: "BİTTİ", ad, süre,
+ortalama ve maksimum nabız; sol altta "Sürüş bitti" bandı. Sürücü değiştirildiyse önce eski sürücünün bitişi, sonra
+yenisinin kontağı ve tanıtımı oynar. Yeni sürücüde panelin çevresinde kırmızı ışık tur atar.
 
 **Yeni sürücü animasyonu.** Ekran açıkken bir araca sürücü atanınca: gösterge gerçek bir AMG'nin kontak anındaki gibi
 kırmızı bölgeye kadar süpürüp gerçek nabza iner, logodaki beş şerit panelin üstünden geçer, panel kırmızı parlar,
@@ -95,6 +107,7 @@ proje içinde olsalardı Next'in dosya izleyicisi her log satırında sayfayı y
 | `setup` | Bağımlılıklar + `.env.local` |
 | `check` / `build` | Tip + lint / üstüne üretim build |
 | `deploy [prod]` | Vercel önizleme ya da canlı dağıtım |
+| `promo [url]` | Video kaydı senaryosu (~95 sn): canlı ekranı tam ekran açıp kayda başlayın, betik arkada admin API'si üzerinden bitiş bayrakları, sürücü tanıtımları, kırmızı bölge anı, sürücü değişimi ve gösterge geçişini oynatır. Her adım zaman koduyla yazılır |
 | `db:reset` | Sürüşler, ölçümler ve kayıtlar silinir, filo yeniden tohumlanır (onay ister; aynı veritabanını kullanan canlı ortamı da etkiler) |
 | `doctor` | Node, pnpm, ortam değişkenleri, servis durumu |
 

@@ -11,7 +11,9 @@ import { Heartbeat } from "./heartbeat";
 import { PulseTrace } from "./pulse-trace";
 import { RevBar } from "./rev-bar";
 import { RevDial } from "./rev-dial";
-import { useIgnition } from "./use-ignition";
+import { FinishOverlay, type FinishSummary } from "./finish-overlay";
+import { PerimeterTrace } from "./perimeter-trace";
+import { useRaceEffects } from "./use-race-effects";
 
 interface VehicleTileProps {
   vehicle: LiveVehicle;
@@ -19,8 +21,10 @@ interface VehicleTileProps {
   /** Sunucu saati; geçen süre tüm ekranlarda aynı görünsün diye istemci saati kullanılmaz. */
   now: number;
   gauge: GaugeStyle;
-  /** Bu araca ekran açıkken yeni sürücü bindiyse varış anı: kontak animasyonunu tetikler. */
+  /** Bu araca ekran açıkken yeni sürücü bindiyse varış anı (gelecekte olabilir): kontak animasyonunu tetikler. */
   arrivedAt: number | null;
+  /** Bu araçta az önce biten sürüş: bitiş bayrağını tetikler. */
+  finished: (FinishSummary & { at: number }) | null;
 }
 
 /**
@@ -32,9 +36,9 @@ interface VehicleTileProps {
  *   alt    son iki dakikanın izi, kalan yüksekliği doldurur
  * Kırmızı bölgede panelin üst kenarı ve rakam AMG kırmızısına döner; başka hiçbir yerde kırmızı yok.
  */
-export const VehicleTile = memo(function VehicleTile({ vehicle, history, now, gauge, arrivedAt }: VehicleTileProps) {
+export const VehicleTile = memo(function VehicleTile({ vehicle, history, now, gauge, arrivedAt, finished }: VehicleTileProps) {
   const { status, driver } = vehicle;
-  const ignition = useIgnition(arrivedAt);
+  const { ignition, perimeter, finish } = useRaceEffects(arrivedAt, finished?.at ?? null);
   // Kontak taraması: gösterge bir an sonuna kadar çıkar, sonra gerçek nabza iner.
   const bpm = ignition === "sweep" ? GAUGE_RANGE.max : vehicle.bpm;
   const redline = bpm != null && bpm >= REDLINE_BPM;
@@ -57,6 +61,9 @@ export const VehicleTile = memo(function VehicleTile({ vehicle, history, now, ga
         )}
         aria-hidden
       />
+      {perimeter && <PerimeterTrace />}
+      {finish && finished && <FinishOverlay summary={finished} />}
+
       {/* Kontak: logodaki beş şerit panelin üstünden geçer */}
       {ignition === "sweep" && (
         <span className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[45%] gap-[3%] motion-safe:animate-[stripe-sweep_1.1s_cubic-bezier(0.65,0,0.35,1)_both]" aria-hidden>

@@ -69,7 +69,11 @@ export interface IngestSample {
   at: number;
 }
 
-const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+/** Cihaz saati bu kadar saparsa ölçüm zamanı sunucu saatine çekilir. */
+export const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+
+/** Tek ingest isteğinde en fazla ölçüm: bileklik 5 dk bağlantısız kalıp biriktirse bile sığar. */
+export const INGEST_MAX_BATCH = 500;
 
 /** Cihazın saati kaymış olabilir: gelecekteki ya da çok eski zaman damgaları sunucu saatine çekilir. */
 export function parseIngestSample(raw: unknown, now: number): Result<IngestSample> {
