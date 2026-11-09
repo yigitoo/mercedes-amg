@@ -145,10 +145,13 @@ Etkinlik canlı yapıldığı için sistem "bir şey bozulursa ekran kararmasın
 
 - **Canlı ekran hata sayfasına düşmez.** `getLiveSnapshot()` hiçbir zaman hata fırlatmaz: veritabanı yanıt vermezse son
   başarılı görüntü `stale: true` ile döner, ekran "Veri gecikiyor" der ve sonraki saniye yeniden dener.
-- **Canlı akış WebSocket, yedeği SSE.** `server.mts` (Next.js'i saran Node sunucusu) `/api/ws`'te WebSocket sunar:
-  kaç ekran bağlı olursa olsun saniyede tek snapshot üretilip hepsine yayınlanır, ekran yoksa durur; 15 sn'de bir
-  ping ile ölü bağlantılar kapanır. Ekran WebSocket'i 3 sn içinde açamazsa (Vercel'de özel sunucu yoktur)
-  `/api/stream` SSE akışına geçer; ekranda **M** tuşu tercihi WebSocket ↔ SSE arasında elle değiştirir, rozet
+- **Canlı akış WebSocket, yedeği SSE.** `/api/ws`'i `DEPLOY_TARGET`'e göre iki altyapıdan biri sunar:
+  - `node` (düz altyapı): `server.mts` (Next.js'i saran Node sunucusu). Kaç ekran bağlı olursa olsun saniyede tek
+    snapshot üretilip hepsine yayınlanır, ekran yoksa durur; 15 sn'de bir ping ile ölü bağlantılar kapanır.
+  - `vercel`: `src/app/api/ws/route.ts` (Vercel Functions WebSocket). Her bağlantı kendi fonksiyonunda saniyede bir
+    snapshot okur; fonksiyon süresi dolmadan 280 sn'de kapanır, ekran 1 sn sonra yeniden bağlanır.
+
+  Ekran WebSocket'i 3 sn içinde açamazsa `/api/stream` SSE akışına geçer; ekranda **M** tuşu tercihi WebSocket ↔ SSE arasında elle değiştirir, rozet
   kullanılan taşımayı gösterir (`WS`, `SSE`, `SSE · yedek`). Kopan bağlantı kendiliğinden yeniden kurulur, bu sürede
   ekran son değerlerle kalır. 6 sn snapshot gelmezse rozet "Bağlantı yok"a döner.
 - **Bileklik veriyi kaybetmez.** Ölçümler zaman damgasıyla kuyruğa girer; sunucuya ulaşılamazsa birikir ve tek istekte
@@ -210,16 +213,20 @@ MongoDB Node.js sürücüsü 7 · Electron. Fontlar yalnız Mercedes kurumsal fo
 | `ADMIN_PASSWORD` | Üretimde evet | Admin ekip şifresi. Yerelde boşsa `amg-demo`. |
 | `INGEST_KEY` | Üretimde evet | Bilekliklerin `X-Device-Key` başlığı. Üretmek için `openssl rand -hex 24`. |
 | `DEMO_SEED` | Hayır | `true` ise boş veritabanına örnek sürücüler atanır. Etkinlikte `false`. |
+| `DEPLOY_TARGET` | Hayır | `vercel` ya da `node`: `/api/ws`'i kimin sunacağı. Boşsa otomatik (Vercel'de `vercel`, başka her yerde `node`). `/api/health` değeri gösterir. |
 
 MongoDB koleksiyonları ilk bağlantıda indeksleriyle otomatik oluşur: `vehicles`, `sessions`, `readings`,
 `audit_log`, `settings`.
 
 ## Dağıtım
 
-Canlı ekran WebSocket'i sürekli çalışan bir Node sunucusunda (`server.mts`: VPS, Railway, Fly.io ya da etkinlikteki
-bilgisayar) kullanır. Vercel'de `/api/ws` yoktur; ekran kendiliğinden SSE yedeğine geçer, her şey çalışmaya devam eder.
+İki altyapı da desteklenir; seçim `DEPLOY_TARGET` ile (boşsa otomatik: Vercel'de `vercel`, başka her yerde `node`).
 
-**VPS (önerilen):** [`deploy/`](deploy/README.md) Docker Compose ile uygulama + Caddy (otomatik HTTPS) kurar:
+**Vercel (`DEPLOY_TARGET=vercel`):** `./mercedesctl deploy prod`. WebSocket, Vercel Functions WebSocket desteğiyle
+`src/app/api/ws/route.ts`'ten sunulur; Vercel projesinde `DEPLOY_TARGET`'i boş bırakmak yeterli.
+
+**Düz Node altyapısı (`DEPLOY_TARGET=node`):** VPS, Railway, Fly.io ya da etkinlikteki bilgisayar; WebSocket'i
+`server.mts` sunar. [`deploy/`](deploy/README.md) Docker Compose ile uygulama + Caddy (otomatik HTTPS) kurar:
 
 ```bash
 cd deploy && cp .env.example .env && $EDITOR .env   # DOMAIN, MONGODB_URI, ADMIN_PASSWORD, INGEST_KEY

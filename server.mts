@@ -4,13 +4,15 @@
  *   node server.mts                          # geliştirme (pnpm dev)
  *   NODE_ENV=production node server.mts      # üretim (pnpm start, önce pnpm build)
  *
- * Next.js route handler'ları WebSocket kabul edemediği için bağlantıyı bu süreç karşılar. Kaç ekran bağlı olursa olsun
- * sunucu saniyede TEK snapshot üretir (/api/live'ı süreç içinden okur) ve hepsine yayınlar; bağlı ekran yoksa durur.
+ * Next.js'in kendi sunucusu (next dev / next start) WebSocket upgrade'ini route'a iletmez; bu süreç /api/ws'i kendisi
+ * karşılar. Kaç ekran bağlı olursa olsun saniyede TEK snapshot üretir (/api/live'ı süreç içinden okur) ve hepsine
+ * yayınlar; bağlı ekran yoksa durur.
  *
- * Vercel gibi sunucusuz ortamlar bu dosyayı çalıştırmaz, orada /api/ws yoktur: canlı ekran WebSocket'i açamayınca
- * /api/stream (SSE) yedeğine geçer. İstemci tarafı: src/components/live/use-live-feed.ts.
+ * Vercel bu dosyayı çalıştırmaz; orada /api/ws, src/app/api/ws/route.ts (Vercel Functions WebSocket) ile sunulur.
+ * İkisi de olmazsa ekran /api/stream (SSE) yedeğine geçer. İstemci tarafı: src/components/live/use-live-feed.ts.
  */
-import { createServer } from "node:http";
+import { EventEmitter } from "node:events";
+import { createServer, type Server } from "node:http";
 
 import next from "next";
 import { WebSocket, WebSocketServer } from "ws";
@@ -24,7 +26,11 @@ const port = Number.parseInt(process.env.PORT || "3000", 10);
 const dev = process.env.NODE_ENV !== "production";
 
 const server = createServer();
-const app = next({ dev, hostname: "localhost", port, httpServer: server });
+// Next, `httpServer`'a kendi `upgrade` dinleyicisini bağlar (HMR). Gerçek sunucuyu verseydik /api/ws upgrade'ini de
+// görür, orada bir route (Vercel için) olduğundan soketi kapatırdı. Ona yalnız bizim ilettiğimiz upgrade'leri gören
+// sahte bir yayıcı veriyoruz.
+const nextUpgrades = new EventEmitter();
+const app = next({ dev, hostname: "localhost", port, httpServer: nextUpgrades as unknown as Server });
 const handle = app.getRequestHandler();
 
 await app.prepare();
@@ -32,8 +38,6 @@ await app.prepare();
 server.on("request", (req, res) => void handle(req, res));
 
 // --- WebSocket --------------------------------------------------------------------------------------------------
-// Next de bu sunucuya bir `upgrade` dinleyicisi bağlar (geliştirmede HMR için); eşleşmeyen yolları bilinçli olarak
-// bize bırakır. Bu yüzden src/app altında /api/ws diye bir route OLMAMALI.
 
 const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false, maxPayload: 4 * 1024 });
 const alive = new WeakSet<WebSocket>();
@@ -42,7 +46,7 @@ server.on("upgrade", (req, socket, head) => {
   // URL.parse hata fırlatmaz: bozuk istek hedefi (ör. `//[`) süreci düşürmesin.
   const pathname = URL.parse(req.url ?? "/", "http://localhost")?.pathname;
   if (pathname == null) return void socket.destroy();
-  if (pathname !== WS_PATH) return; // HMR vb. Next'e kalır
+  if (pathname !== WS_PATH) return void nextUpgrades.emit("upgrade", req, socket, head); // HMR vb. Next'e
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
 });
 
@@ -112,6 +116,10 @@ const heartbeat = setInterval(() => {
 
 server.listen(port, () => {
   console.log(`> AMG Pulse http://localhost:${port} (${dev ? "geliştirme" : "üretim"}) · WebSocket ${WS_PATH}`);
+  // .env dosyaları app.prepare() ile yüklendi. Bu sunucu düz Node altyapısıdır; "vercel" burada bir yanlışlıktır.
+  if (process.env.DEPLOY_TARGET?.trim() === "vercel") {
+    console.warn("[ws] DEPLOY_TARGET=vercel ama server.mts çalışıyor: WebSocket'i yine bu süreç sunar. Burada node yazın ya da boş bırakın.");
+  }
 });
 
 function shutdown() {

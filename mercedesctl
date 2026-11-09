@@ -237,7 +237,8 @@ cmd_db_reset() {
 # ============================================================================
 cmd_deploy() {
   have vercel || die "Vercel CLI yok: pnpm add -g vercel"
-  info "Vercel'de WebSocket (/api/ws) yok: canlı ekran SSE yedeğiyle çalışır. WebSocket için: deploy/ (VPS)"
+  [ "$(env_get DEPLOY_TARGET)" = node ] && warn ".env.local DEPLOY_TARGET=node: Vercel projesinde DEPLOY_TARGET'i boş bırakın ya da vercel yapın (yerel dosya Vercel'e gitmez)"
+  info "Vercel'de /api/ws, Vercel Functions WebSocket ile çalışır (DEPLOY_TARGET boşsa otomatik vercel)"
   if [ "${1:-}" = prod ]; then
     cmd_build
     confirm "Canlıya (production) dağıtılsın mı?" || { info "vazgeçildi"; return 0; }
@@ -264,6 +265,7 @@ cmd_doctor() {
   env_set MONGODB_URI && ok "MONGODB_URI tanımlı ${C_MUTED}(db: $(env_get MONGODB_DB || true))${C_0}" || warn "MONGODB_URI boş: bellek modu, veriler kalıcı değil"
   env_set ADMIN_PASSWORD && ok "ADMIN_PASSWORD tanımlı" || warn "ADMIN_PASSWORD boş: yerelde amg-demo, üretimde zorunlu"
   env_set INGEST_KEY && ok "INGEST_KEY tanımlı" || warn "INGEST_KEY boş: yerelde dev-device-key, üretimde zorunlu"
+  info "DEPLOY_TARGET=$(env_get DEPLOY_TARGET || true) ${C_MUTED}(boş: otomatik → yerelde node, Vercel'de vercel)${C_0}"
   [ "$(env_get DEMO_SEED)" = true ] && info "DEMO_SEED=true: boş veritabanına örnek sürücüler atanır (etkinlikte false)"
   cmd_status
 }

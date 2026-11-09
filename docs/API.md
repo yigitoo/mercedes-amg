@@ -54,7 +54,7 @@ curl -X POST https://<alan-adı>/api/ingest \
 
 ## WS /api/ws
 
-Canlı ekranın WebSocket akışı (`server.mts`: `pnpm dev`, `pnpm start`, `mercedesctl up`, `deploy/`). Her saniye
+Canlı ekranın WebSocket akışı (Vercel'de ya da `server.mts` ile: `pnpm dev`, `pnpm start`, `mercedesctl up`, `deploy/`). Her saniye
 bir metin mesajı: `{"type":"snapshot","snapshot":<LiveSnapshot>}`; yeni bağlanan istemci son görüntüyü hemen alır.
 Sunucu 15 sn'de bir ping gönderir, pong vermeyen bağlantıyı kapatır. İstemciden mesaj beklenmez.
 
@@ -63,7 +63,9 @@ const ws = new WebSocket("wss://<alan-adı>/api/ws");
 ws.onmessage = (e) => { const { type, snapshot } = JSON.parse(e.data); /* type === "snapshot" */ };
 ```
 
-Vercel gibi sunucusuz ortamlarda bu uç nokta yoktur; canlı ekran 3 sn içinde bağlanamazsa `GET /api/stream`'e geçer.
+Sunan taraf `DEPLOY_TARGET`'e bağlıdır: `node` → `server.mts` (tek yayın), `vercel` → `src/app/api/ws/route.ts` (Vercel
+Functions WebSocket; bağlantı 280 sn'de kapanır, istemci yeniden bağlanır). Canlı ekran 3 sn içinde bağlanamazsa
+`GET /api/stream`'e geçer.
 Ekranda **M** tuşu tercihi WebSocket ↔ SSE arasında değiştirir (ekran başına hatırlanır); durum rozetinde kullanılan
 taşıma `WS`, `SSE` ya da `SSE · yedek` olarak görünür.
 
@@ -99,7 +101,7 @@ Aynı snapshot, tek seferlik JSON. `stale` ise `503`.
 
 ## GET /api/health
 
-`{ "ok": true, "storage": "mongodb" | "memory", "vehicles": 8, "latencyMs": 42 }` ya da `503`.
+`{ "ok": true, "storage": "mongodb" | "memory", "deployTarget": "vercel" | "node", "vehicles": 8, "latencyMs": 42 }` ya da `503`.
 
 ## Admin
 

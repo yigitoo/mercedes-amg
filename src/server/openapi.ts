@@ -93,7 +93,7 @@ export function buildOpenApiDocument() {
           tags: ["Canlı ekran"],
           summary: "Canlı akış (Server-Sent Events, WebSocket yedeği)",
           description:
-            "WebSocket `/api/ws` açılamadığında (ör. Vercel) ya da ekranda M ile SSE seçildiğinde kullanılır. Saniyede bir `snapshot` olayı. Veritabanına ulaşılamazsa akış kopmaz, `stale: true` ile son bilinen görüntü gelir. Akış 280 sn'de kapanır; `retry: 1000` ile tarayıcı yeniden bağlanır.",
+            "WebSocket `/api/ws` açılamadığında ya da ekranda M ile SSE seçildiğinde kullanılır. Saniyede bir `snapshot` olayı. Veritabanına ulaşılamazsa akış kopmaz, `stale: true` ile son bilinen görüntü gelir. Akış 280 sn'de kapanır; `retry: 1000` ile tarayıcı yeniden bağlanır.",
           responses: {
             "200": {
               description: "`event: snapshot` + `data: <LiveSnapshot JSON>`",

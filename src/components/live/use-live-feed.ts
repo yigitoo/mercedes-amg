@@ -141,12 +141,12 @@ export function useLiveFeed(
 /** WebSocket kopunca yeniden bağlanma beklemesi: 1 sn'den başlar, 5 sn'de sabitlenir. */
 const WS_RETRY_MIN_MS = 1_000;
 const WS_RETRY_MAX_MS = 5_000;
-/** WebSocket bu sürede açılamazsa bu sunucuda yok sayılır ve SSE'ye geçilir (Vercel'de /api/ws yoktur). */
+/** WebSocket bu sürede açılamazsa bu sunucuda yok sayılır ve SSE'ye geçilir. */
 const WS_CONNECT_TIMEOUT_MS = 3_000;
 
 /**
  * Canlı akış taşıması.
- *   "ws":  `/api/ws` (WebSocket, server.mts). Hiç açılamazsa — örneğin Vercel'de, orada özel sunucu yoktur — bu
+ *   "ws":  `/api/ws` (WebSocket: server.mts ya da Vercel'de api/ws/route.ts). Hiç açılamazsa (ör. düz `next dev`) bu
  *          bağlantı boyunca `/api/stream` (SSE) kullanılır. Açılmış WebSocket koparsa 1-5 sn aralıkla yeniden denenir.
  *   "sse": doğrudan `/api/stream`. EventSource kopan bağlantıyı kendisi yeniden kurar.
  * `onTransport` o an gerçekten kullanılan taşımayı bildirir.
