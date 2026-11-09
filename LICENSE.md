@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Yiğit GÜMÜŞ
+Copyright (c) 2026 Emre Cansever & Colleagues
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

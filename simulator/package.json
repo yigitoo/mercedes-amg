@@ -1,0 +1,6 @@
+{
+  "name": "amg-pulse-simulator",
+  "private": true,
+  "type": "module",
+  "description": "Nabız bilekliği simülatörü; bağımlılığı yok, Node 24+ ile doğrudan çalışır."
+}

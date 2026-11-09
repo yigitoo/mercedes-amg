@@ -1,0 +1,38 @@
+{
+  "name": "amg-pulse",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "check": "pnpm typecheck && pnpm lint",
+    "simulate": "node simulator/index.ts"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "mongodb": "^7.8.0",
+    "motion": "^14.10.1",
+    "next": "16.4.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "packageManager": "pnpm@12.16.1",
+  "description": "Mercedes-AMG s\u00fcr\u00fc\u015f etkinli\u011fi i\u00e7in canl\u0131 nab\u0131z takibi: TV ekran\u0131, admin paneli, ingest API ve sim\u00fclat\u00f6r.",
+  "engines": {
+    "node": ">=24"
+  }
+}

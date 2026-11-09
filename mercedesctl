@@ -1,0 +1,299 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  mercedesctl: AMG Pulse tek kontrol betiği
+#
+#  Yerelde web uygulaması (Next.js), nabız simülatörü ve masaüstü uygulamasını (Electron) tek yerden
+#  yönetir; Vercel'e dağıtır.
+#
+#  Kullanım:      ./mercedesctl <komut>     ·   ./mercedesctl help
+#  İlk deneme:    ./mercedesctl up          (kurulum, web, simülatör; tarayıcı açılır)
+# ============================================================================
+set -euo pipefail
+
+# Gerçek konum: betik bir kısayol (symlink) üzerinden çağrılsa da repo kökü bulunur.
+_self="${BASH_SOURCE[0]}"
+while [ -L "$_self" ]; do _dir="$(cd "$(dirname "$_self")" && pwd)"; _self="$(readlink "$_self")"; [[ "$_self" = /* ]] || _self="$_dir/$_self"; done
+ROOT="$(cd "$(dirname "$_self")" && pwd)"
+cd "$ROOT"
+
+CLI="./mercedesctl"
+PORT="${PORT:-3000}"
+URL="http://localhost:$PORT"
+# Çalışma dosyaları (pid, log) Next'in izlemediği yerde. Proje içinde olsalardı dosya izleyici her log
+# satırını kod değişikliği sanıp sayfayı sürekli yeniden yüklerdi.
+RUNDIR="$ROOT/node_modules/.cache/mercedesctl"
+LOGDIR="$RUNDIR/logs"
+SERVICES=(web sim desktop)
+
+# shellcheck source=scripts/ui.sh
+. "$ROOT/scripts/ui.sh" || { echo "scripts/ui.sh okunamadı: repo eksik mi? ($ROOT)" >&2; exit 1; }
+STEP_LOG="${TMPDIR:-/tmp}/mercedesctl-step.log"
+
+# ── hata toleransı ─────────────────────────────────────────────────────────
+_on_err() {
+  local rc=$? line="${BASH_LINENO[0]:-?}" cmd="${BASH_COMMAND:-?}"
+  { [ "$rc" = 0 ] || [ "$rc" = 3 ]; } && return 0
+  printf '%s\n' "${C_RED}✗ beklenmeyen hata${C_0} ${C_MUTED}(mercedesctl:$line, çıkış $rc)${C_0}: $cmd" >&2
+  printf '%s\n' "${C_MUTED}  ipucu: $CLI doctor · loglar: $CLI logs web${C_0}" >&2
+}
+_on_int() { printf '\n%s\n' "${C_RED}! iptal edildi${C_0}" >&2; exit 130; }
+trap _on_err ERR
+trap _on_int INT
+set -E
+
+# ── yardımcılar ────────────────────────────────────────────────────────────
+env_get() { [ -f .env.local ] && grep -E "^$1=" .env.local | tail -1 | cut -d= -f2- || true; }
+env_set() { [ -n "$(env_get "$1")" ]; }
+is_running() { [ -f "$RUNDIR/$1.pid" ] && kill -0 "$(cat "$RUNDIR/$1.pid")" 2>/dev/null; }
+port_open() { lsof -iTCP:"$1" -sTCP:LISTEN -n -P >/dev/null 2>&1; }
+_tree() { local p="$1" c; for c in $(pgrep -P "$p" 2>/dev/null || true); do _tree "$c"; done; echo "$p"; }
+
+start_bg() { # start_bg <ad> <komut...>
+  local name="$1"; shift
+  if is_running "$name"; then info "$name zaten çalışıyor (pid $(cat "$RUNDIR/$name.pid"))"; return 0; fi
+  mkdir -p "$LOGDIR"
+  nohup "$@" </dev/null >"$LOGDIR/$name.log" 2>&1 &
+  echo $! >"$RUNDIR/$name.pid"
+  ok "$name başladı ${C_MUTED}(pid $!, log: $CLI logs $name)${C_0}"
+}
+
+stop_bg() {
+  local name="$1"
+  if is_running "$name"; then
+    # shellcheck disable=SC2046
+    kill $(_tree "$(cat "$RUNDIR/$name.pid")") 2>/dev/null || true
+    ok "$name durduruldu"
+  fi
+  rm -f "$RUNDIR/$name.pid"
+}
+
+wait_healthy() {
+  local start=$SECONDS
+  for _ in $(seq 1 90); do
+    if curl -fsS -m 10 "$URL/api/health" >/dev/null 2>&1; then ok "web hazır → $URL ${C_MUTED}($(_fmt_secs $((SECONDS - start))))${C_0}"; return 0; fi
+    is_running web || die "web başlarken kapandı: $CLI logs web"
+    sleep 1
+  done
+  die "web 90 sn içinde yanıt vermedi: $CLI logs web"
+}
+
+need_deps() { [ -d node_modules ] && [ -f .env.local ] || cmd_setup; }
+
+# Electron'un kendi çıkarıcısı bazı Node sürümlerinde (26) sessizce başarısız oluyor: indirilen arşiv elle açılır.
+ensure_electron() {
+  [ -d desktop/node_modules ] || step "masaüstü bağımlılıkları (Electron, bir kez)" pnpm --dir desktop install
+  local dir; dir="$(cd desktop && node -p 'require("path").dirname(require.resolve("electron/package.json"))')"
+  [ -f "$dir/path.txt" ] && return 0
+  (cd "$dir" && node install.js >/dev/null 2>&1) || true
+  [ -f "$dir/path.txt" ] && return 0
+  local zip; zip="$(find "$HOME/Library/Caches/electron" "$HOME/.cache/electron" -name "electron-v*-*.zip" 2>/dev/null | head -1)"
+  [ -n "$zip" ] || die "Electron indirilemedi: pnpm --dir desktop rebuild electron"
+  rm -rf "$dir/dist" && mkdir -p "$dir/dist" && unzip -q "$zip" -d "$dir/dist"
+  printf 'Electron.app/Contents/MacOS/Electron' >"$dir/path.txt"
+  ok "Electron hazır"
+}
+
+# ============================================================================
+#  KURULUM
+# ============================================================================
+cmd_setup() {
+  title "kurulum"
+  have node || die "Node.js yok (24+ gerekli): https://nodejs.org"
+  local major; major="$(node -p 'process.versions.node.split(".")[0]')"
+  [ "$major" -ge 24 ] || die "Node.js $major bulundu, 24+ gerekli"
+  ok "Node.js $(node -v)"
+  have pnpm || step "pnpm (corepack)" corepack enable pnpm
+  step "bağımlılıklar" pnpm install
+  if [ ! -f .env.local ]; then
+    sed 's/^DEMO_SEED=false/DEMO_SEED=true/' .env.example >.env.local
+    ok ".env.local oluşturuldu ${C_MUTED}(MONGODB_URI boş: veriler bellekte, örnek sürücülerle)${C_0}"
+  else
+    ok ".env.local mevcut"
+  fi
+}
+
+# ============================================================================
+#  GELİŞTİRME
+# ============================================================================
+cmd_web() {
+  if port_open "$PORT" && ! is_running web; then die ":$PORT başka bir süreçte açık (lsof -iTCP:$PORT). PORT=3001 $CLI up ile başka port seçin"; fi
+  start_bg web pnpm exec next dev -p "$PORT"
+  wait_healthy
+}
+
+cmd_sim() {
+  is_running web || warn "web çalışmıyor; simülatör ölçümleri bağlanana kadar kuyrukta tutar"
+  start_bg sim env AMG_URL="$URL" INGEST_KEY="$(env_get INGEST_KEY)" node simulator/index.ts --quiet "$@"
+}
+
+cmd_up() {
+  banner "canlı nabız takibi"
+  need_deps
+  title "başlatılıyor"
+  cmd_web
+  cmd_sim
+  title "hazır"
+  printf '  %-14s %s\n' "Canlı ekran" "$URL"
+  printf '  %-14s %s\n' "Admin" "$URL/admin ${C_MUTED}(şifre: $(env_set ADMIN_PASSWORD && echo ".env.local ADMIN_PASSWORD" || echo "amg-demo"))${C_0}"
+  printf '  %-14s %s\n' "Durdurmak" "$CLI down"
+  [ "${NO_OPEN:-}" = 1 ] || open "$URL" 2>/dev/null || true
+}
+
+cmd_down() { title "durduruluyor"; local s; for s in sim desktop web; do stop_bg "$s"; done; }
+cmd_restart() { cmd_down; cmd_up; }
+
+cmd_status() {
+  title "durum"
+  local s
+  for s in "${SERVICES[@]}"; do
+    if is_running "$s"; then printf '  %s●%s %-8s %s\n' "$C_RED" "$C_0" "$s" "çalışıyor ${C_MUTED}(pid $(cat "$RUNDIR/$s.pid"))${C_0}"
+    else printf '  %s○%s %-8s %s\n' "$C_MUTED" "$C_0" "$s" "${C_MUTED}kapalı${C_0}"; fi
+  done
+  local health; health="$(curl -fsS -m 10 "$URL/api/health" 2>/dev/null || true)"
+  if [ -n "$health" ]; then printf '  %-10s %s\n' "sağlık" "$health"; else printf '  %-10s %s\n' "sağlık" "${C_MUTED}yanıt yok ($URL)${C_0}"; fi
+}
+
+cmd_logs() {
+  local name="${1:-web}" f="$LOGDIR/${1:-web}.log"
+  [ -f "$f" ] || die "log yok: $name ${C_MUTED}(seçenekler: ${SERVICES[*]})${C_0}"
+  info "$f (çıkış: Ctrl-C)"
+  tail -n 80 -f "$f"
+}
+
+cmd_open() {
+  case "${1:-live}" in
+    live) open "$URL" ;;
+    admin) open "$URL/admin" ;;
+    logs) open "$URL/admin/logs" ;;
+    *) die "hedef: live | admin | logs" ;;
+  esac
+}
+
+cmd_desktop() {
+  ensure_electron
+  start_bg desktop env AMG_URL="${1:-$URL}" pnpm --dir desktop start
+}
+
+cmd_kiosk() {
+  ensure_electron
+  start_bg desktop env AMG_URL="${1:-$URL}" pnpm --dir desktop kiosk
+  info "kiosk: tam ekran, çıkış Cmd/Ctrl+Q"
+}
+
+# Ingest uç noktasını gerçek bir bileklik gibi dener: anahtar, eşleşme ve kayıt sonucu.
+cmd_ingest_test() {
+  local target="${1:-$URL}" key; key="$(env_get INGEST_KEY)"; key="${key:-dev-device-key}"
+  title "ingest denemesi → $target"
+  local body; body="$(curl -sS -m 15 -X POST "$target/api/ingest" -H "X-Device-Key: $key" -H "Content-Type: application/json" -d '{"deviceId":"band-01","bpm":99}' -w '\n%{http_code}')" || die "sunucuya ulaşılamadı: $target"
+  local code="${body##*$'\n'}"; body="${body%$'\n'*}"
+  case "$code" in
+    202) ok "kabul edildi ${C_MUTED}$body${C_0}" ;;
+    401) die "401: INGEST_KEY eşleşmiyor (.env.local ↔ sunucu)" ;;
+    *) die "HTTP $code: $body" ;;
+  esac
+}
+
+# ============================================================================
+#  KALİTE
+# ============================================================================
+cmd_check() { title "denetim"; step "tip kontrolü" pnpm typecheck; step "lint" pnpm lint; }
+cmd_build() { cmd_check; title "üretim derlemesi"; step "next build" pnpm build; }
+cmd_clean() {
+  title "temizlik"
+  confirm "Next önbelleği (.next) ve çalışma logları silinsin mi?" || { info "vazgeçildi"; return 0; }
+  is_running web && cmd_down
+  rm -rf .next "$RUNDIR"
+  ok "temizlendi"
+}
+
+# ============================================================================
+#  DAĞITIM
+# ============================================================================
+cmd_deploy() {
+  have vercel || die "Vercel CLI yok: pnpm add -g vercel"
+  if [ "${1:-}" = prod ]; then
+    cmd_build
+    confirm "Canlıya (production) dağıtılsın mı?" || { info "vazgeçildi"; return 0; }
+    vercel deploy --prod
+  else
+    vercel deploy
+  fi
+}
+
+# ============================================================================
+#  TANI
+# ============================================================================
+cmd_doctor() {
+  banner "doctor"
+  title "araçlar"
+  local t
+  for t in node pnpm curl lsof unzip vercel; do
+    if have "$t"; then ok "$t ${C_MUTED}$("$t" --version 2>/dev/null | head -1)${C_0}"; else
+      case "$t" in vercel) info "vercel yok (yalnız deploy için)" ;; *) fail "$t yok" ;; esac
+    fi
+  done
+  title "yapılandırma (.env.local)"
+  [ -f .env.local ] || warn ".env.local yok: $CLI setup"
+  env_set MONGODB_URI && ok "MONGODB_URI tanımlı ${C_MUTED}(db: $(env_get MONGODB_DB || true))${C_0}" || warn "MONGODB_URI boş: bellek modu, veriler kalıcı değil"
+  env_set ADMIN_PASSWORD && ok "ADMIN_PASSWORD tanımlı" || warn "ADMIN_PASSWORD boş: yerelde amg-demo, üretimde zorunlu"
+  env_set INGEST_KEY && ok "INGEST_KEY tanımlı" || warn "INGEST_KEY boş: yerelde dev-device-key, üretimde zorunlu"
+  [ "$(env_get DEMO_SEED)" = true ] && info "DEMO_SEED=true: boş veritabanına örnek sürücüler atanır (etkinlikte false)"
+  cmd_status
+}
+
+# ============================================================================
+#  YARDIM
+# ============================================================================
+cmd_help() {
+  banner "kontrol merkezi"
+  local h="$C_BOLD" g="$C_WHITE" m="$C_MUTED" z="$C_0"
+  row() { printf "  ${g}%-24s${z} %s\n" "$1" "$2"; }
+  printf '\n%s\n' "${h}Kullanım:${z} $CLI <komut> ${m}(ilk deneme: $CLI up)${z}"
+
+  printf '\n%s\n' "${h}Geliştirme${z}"
+  row "up | down | restart" "web + simülatör arka planda, sağlık kontrollü; tarayıcı açılır (NO_OPEN=1 açmaz)"
+  row "web | sim [ops]" "tek tek başlat · simülatör: --devices 4 --dropout 0 --seed 7"
+  row "status | logs [ad]" "ne çalışıyor + /api/health · canlı log (web | sim | desktop)"
+  row "open [hedef]" "live · admin · logs"
+  row "ingest:test [url]" "ingest uç noktasını bileklik gibi dener (anahtar + eşleşme)"
+
+  printf '\n%s\n' "${h}Masaüstü${z}"
+  row "desktop [url]" "Electron penceresi; varsayılan $URL"
+  row "kiosk [url]" "TV için tam ekran kiosk (çıkış: Cmd/Ctrl+Q)"
+
+  printf '\n%s\n' "${h}Kalite${z}"
+  row "check" "tip + lint"
+  row "build" "check + üretim derlemesi"
+  row "clean" "Next önbelleği ve çalışma loglarını siler (onay ister)"
+
+  printf '\n%s\n' "${h}Dağıtım ve tanı${z}"
+  row "setup" "bağımlılıklar + .env.local"
+  row "deploy [prod]" "Vercel önizleme · prod: build + onay + canlı"
+  row "doctor" "araçlar, ortam değişkenleri, servis durumu"
+  echo
+}
+
+# ============================================================================
+#  YÖNLENDİRME
+# ============================================================================
+COMMANDS=(up down restart web sim status logs open ingest:test desktop kiosk check build clean setup deploy doctor help)
+command="${1:-help}"
+[ $# -gt 0 ] && shift
+case "$command" in
+  up | down | restart | web | status | check | build | clean | setup | doctor | help) "cmd_$command" ;;
+  sim) cmd_sim "$@" ;;
+  logs) cmd_logs "${1:-web}" ;;
+  open) cmd_open "${1:-live}" ;;
+  desktop) cmd_desktop "${1:-}" ;;
+  kiosk) cmd_kiosk "${1:-}" ;;
+  deploy) cmd_deploy "${1:-}" ;;
+  ingest:test) cmd_ingest_test "${1:-}" ;;
+  -h | --help) cmd_help ;;
+  *)
+    fail "bilinmeyen komut: $command"
+    hint="$(suggest "$command" "${COMMANDS[@]}")"
+    [ -n "$hint" ] && info "bunu mu demek istediniz: $CLI $hint"
+    info "tüm komutlar: $CLI help"
+    exit 2
+    ;;
+esac

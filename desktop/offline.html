@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>AMG Pulse</title>
+    <style>
+      /* Yalnız Mercedes kurumsal fontları (brand/fonts'tan kopya). */
+      @font-face{font-family:"MB Corpo S Title";src:url("fonts/MBCorpoSTitle-Bold.otf");font-weight:700}
+      @font-face{font-family:"MB Corpo S Text";src:url("fonts/MBCorpoSText-Regular.otf");font-weight:400}
+      html,body{margin:0;height:100%;background:#0a0a0b;color:#f3f3f4;font-family:"MB Corpo S Text"}
+      h1{font-family:"MB Corpo S Title";font-weight:700}
+      main{height:100%;display:grid;place-items:center;text-align:center}
+      h1{font-size:28px;margin:0 0 8px}
+      p{color:#8e8e96;margin:0}
+      .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#b21e23;margin-right:8px;animation:p 1.6s infinite}
+      @keyframes p{50%{opacity:.25}}
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <h1><span class="dot"></span>Sunucuya bağlanılıyor</h1>
+        <p id="target"></p>
+      </div>
+    </main>
+    <script>
+      // Hedef adrese ulaşılınca otomatik geri döner.
+      const params = new URLSearchParams(location.search);
+      const target = params.get("target");
+      const retry = Number(params.get("retry") || 5000);
+      document.getElementById("target").textContent = target + " · " + retry / 1000 + " sn'de bir yeniden deneniyor";
+      setInterval(() => fetch(target, { mode: "no-cors" }).then(() => location.replace(target)).catch(() => {}), retry);
+    </script>
+  </body>
+</html>

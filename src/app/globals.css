@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/*
+ * AMG Pulse tasarım token'ları. Kaynak: brand/README.md ve brand/tokens.json.
+ *
+ *  Renk   Siyah zemin, beyaz yazı, tek vurgu AMG Red (#B21E23). Kırmızı yalnızca "aktive eder":
+ *         birincil düğme, canlı göstergesi, kırmızı bölge. Başka renk eklenmez.
+ *  Biçim  Keskin köşe (2px). AMG logosundaki eğik şeritler tek dekoratif motiftir.
+ *  Tema   Yalnız koyu: marka siyah, ekran karanlık garajda 65" TV'de izlenir.
+ */
+
+@theme {
+  --color-ink: #0a0a0b;
+  --color-surface: #111113;
+  --color-raised: #18181b;
+  --color-line: #26262a;
+  --color-line-strong: #3a3a40;
+  --color-dim: #5f5f66;
+  --color-muted: #8e8e96;
+  --color-soft: #bdbdc3;
+  --color-fg: #f3f3f4;
+
+  --color-amg: #b21e23;
+  --color-amg-hover: #c9252b;
+  /* Küçük metin ve ince çizgilerde koyu zeminde okunabilir ton (AA). */
+  --color-amg-text: #ff5a5f;
+
+  /* Yalnız Mercedes kurumsal fontları (brand/fonts). Başka yazı tipi kullanılmaz. */
+  --font-title: var(--font-corpo-title);
+  --font-text: var(--font-corpo-text);
+  --font-sans: var(--font-corpo-text);
+  --font-serif: var(--font-corpo-a);
+  --font-mono: var(--font-corpo-text);
+  /* Küçük büyük harf etiketler (CANLI, SÜRE, birimler): Corpo S Text. */
+  --font-label: var(--font-corpo-text);
+  /* Corpo A (serif) yalnızca "Mercedes-Benz" yazısında; arayüz metninde kullanılmaz. */
+  --font-wordmark: var(--font-corpo-a);
+
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  /* Admin kartları: çok hafif yumuşatma. */
+  --radius-card: 6px;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-quart: cubic-bezier(0.5, 0, 0.75, 0);
+
+  --animate-live-dot: live-dot 1.6s var(--ease-out-expo) infinite;
+  /* Süre bileşenden gelir: 60/bpm saniye (bkz. components/live/heartbeat.tsx). */
+  --animate-heartbeat: heartbeat var(--beat, 1s) var(--ease-out-expo) infinite;
+
+  @keyframes heartbeat {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    12% {
+      transform: scale(1.22);
+    }
+    28% {
+      transform: scale(0.96);
+    }
+    40% {
+      transform: scale(1.08);
+    }
+  }
+
+  /* Belirsiz yükleme: şeritler sırayla yanar (AmgProgress). */
+  @keyframes segment-wave {
+    0%,
+    100% {
+      background-color: rgb(255 255 255 / 0.07);
+    }
+    40% {
+      background-color: var(--color-fg);
+    }
+  }
+
+  @keyframes live-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-ink);
+  }
+
+  body {
+    background: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-text);
+  }
+
+  /* Form öğeleri ve SVG metni de aynı aileyi kullansın (tarayıcı varsayılanına düşmesin). */
+  input,
+  button,
+  select,
+  textarea,
+  svg text {
+    font-family: inherit;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-fg);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-amg);
+    color: white;
+  }
+}
+
+@layer components {
+  /* AMG karbon deseni: brand/patterns/carbon-white.png, çok düşük opaklıkta zemin dokusu. */
+  .carbon {
+    position: relative;
+    isolation: isolate;
+  }
+  .carbon::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    /* Kaynak desen kusursuz döşenmiyor (dikiş görünür); tek parça, kaplayarak yayılır. */
+    background-image: url("/brand/patterns/carbon-white.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    opacity: var(--carbon-opacity, 0.035);
+  }
+
+  /* Dama bayrağı deseni: bitiş, boş durum. */
+  .checkered {
+    position: relative;
+    isolation: isolate;
+  }
+  .checkered::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: url("/brand/patterns/checkered-flag-white.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    opacity: var(--checkered-opacity, 0.05);
+  }
+
+  /* Logodaki beş eğik şerit; bölüm işareti olarak kullanılır. */
+  .amg-stripes {
+    display: inline-block;
+    width: 2.5em;
+    height: 0.7em;
+    background: repeating-linear-gradient(-60deg, currentColor 0 0.28em, transparent 0.28em 0.46em);
+    transform: skewX(0deg);
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  html,
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

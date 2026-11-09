@@ -1,0 +1,24 @@
+{
+  "name": "amg-pulse-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AMG Pulse masaüstü uygulaması: canlı ekranı ve admin panelini pencere/kiosk olarak açar.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "kiosk": "electron . --kiosk",
+    "dist": "electron-builder --mac --win"
+  },
+  "devDependencies": {
+    "electron": "39.8.10",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.mercedes-amg.pulse",
+    "productName": "AMG Pulse",
+    "files": ["main.cjs", "offline.html", "icon.png", "fonts/**"],
+    "directories": { "output": "dist" },
+    "mac": { "category": "public.app-category.sports", "icon": "icon.png", "target": ["dmg"] },
+    "win": { "icon": "icon.png", "target": ["nsis"] }
+  }
+}
