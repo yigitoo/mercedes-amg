@@ -107,7 +107,7 @@ canlı ekranı yeniden yüklerdi.
 | `desktop [url]` | Masaüstü uygulaması; varsayılan yerel sunucu, istenirse Vercel adresi |
 | `setup` | Bağımlılıklar + `.env.local` |
 | `check` / `build` | Tip + lint / üstüne üretim build |
-| `deploy [prod]` | Vercel önizleme ya da canlı dağıtım (canlı ekran Vercel'de güncellenmez, bkz. [Dağıtım](#dağıtım)) |
+| `deploy [prod]` | Vercel önizleme ya da canlı dağıtım (canlı ekran orada SSE ile çalışır) |
 | `promo [url]` | Video kaydı senaryosu (~95 sn): canlı ekranı tam ekran açıp kayda başlayın, betik arkada admin API'si üzerinden bitiş bayrakları, sürücü tanıtımları, kırmızı bölge anı, sürücü değişimi ve gösterge geçişini oynatır. Her adım zaman koduyla yazılır |
 | `db:reset` | Sürüşler, ölçümler ve kayıtlar silinir, filo yeniden tohumlanır (onay ister; aynı veritabanını kullanan canlı ortamı da etkiler) |
 | `doctor` | Node, pnpm, ortam değişkenleri, servis durumu |
@@ -124,7 +124,9 @@ flowchart LR
   repo --> mongo[("MongoDB")]
   repo -. yerel .-> mem[("Bellek")]
   svc --> ws["WS /api/ws<br/>WebSocket, 1 Hz"]
+  svc -. "yedek · M" .-> stream["GET /api/stream<br/>SSE, 1 Hz"]
   ws --> tv["Canlı ekran<br/>TV · link · masaüstü"]
+  stream -.-> tv
 ```
 
 Katmanlar tek yönlü bağımlıdır; her katman yalnız altındakini bilir:
@@ -143,10 +145,12 @@ Etkinlik canlı yapıldığı için sistem "bir şey bozulursa ekran kararmasın
 
 - **Canlı ekran hata sayfasına düşmez.** `getLiveSnapshot()` hiçbir zaman hata fırlatmaz: veritabanı yanıt vermezse son
   başarılı görüntü `stale: true` ile döner, ekran "Veri gecikiyor" der ve sonraki saniye yeniden dener.
-- **Canlı akış WebSocket.** `server.mts` (Next.js'i saran Node sunucusu) `/api/ws`'te WebSocket sunar: kaç ekran
-  bağlı olursa olsun saniyede tek snapshot üretilip hepsine yayınlanır, ekran yoksa durur; 15 sn'de bir ping ile ölü
-  bağlantılar kapanır. Bağlantı koparsa ekran 1-5 sn aralıkla yeniden bağlanır ve bu sürede son değerlerle kalır.
-  6 sn snapshot gelmezse rozet "Bağlantı yok"a döner.
+- **Canlı akış WebSocket, yedeği SSE.** `server.mts` (Next.js'i saran Node sunucusu) `/api/ws`'te WebSocket sunar:
+  kaç ekran bağlı olursa olsun saniyede tek snapshot üretilip hepsine yayınlanır, ekran yoksa durur; 15 sn'de bir
+  ping ile ölü bağlantılar kapanır. Ekran WebSocket'i 3 sn içinde açamazsa (Vercel'de özel sunucu yoktur)
+  `/api/stream` SSE akışına geçer; ekranda **M** tuşu tercihi WebSocket ↔ SSE arasında elle değiştirir, rozet
+  kullanılan taşımayı gösterir (`WS`, `SSE`, `SSE · yedek`). Kopan bağlantı kendiliğinden yeniden kurulur, bu sürede
+  ekran son değerlerle kalır. 6 sn snapshot gelmezse rozet "Bağlantı yok"a döner.
 - **Bileklik veriyi kaybetmez.** Ölçümler zaman damgasıyla kuyruğa girer; sunucuya ulaşılamazsa birikir ve tek istekte
   toplu gönderilir (en fazla 500). Saati kaymış cihazın zaman damgası sunucu saatine çekilir.
 - **Toplu yazma.** Bir ingest isteği kaç ölçüm içerirse içersin MongoDB'ye sabit 3 toplu işlem yapar
@@ -181,7 +185,7 @@ src/
   app/                 Sayfalar ve API (Next.js App Router)
     page.tsx           Canlı ekran
     admin/             Admin paneli: (panel)/ sayfalar, login, actions.ts
-    api/               ingest · live · health · admin/*/csv  (/api/ws: server.mts)
+    api/               ingest · stream · live · health · admin/*/csv  (/api/ws: server.mts)
   components/          live/ · admin/ · ui/ · brand/
   domain/              Saf tipler ve kurallar
   server/              db/ (depolar) · services/ · auth · env · http
@@ -212,9 +216,8 @@ MongoDB koleksiyonları ilk bağlantıda indeksleriyle otomatik oluşur: `vehicl
 
 ## Dağıtım
 
-Canlı ekran WebSocket kullandığı için uygulama sürekli çalışan bir Node sunucusunda koşmalıdır (VPS, Railway, Fly.io,
-Render ya da etkinlikteki bilgisayar). Vercel gibi sunucusuz ortamlarda `/api/ws` yoktur; admin ve ingest çalışır ama
-canlı ekran güncellenmez.
+Canlı ekran WebSocket'i sürekli çalışan bir Node sunucusunda (`server.mts`: VPS, Railway, Fly.io ya da etkinlikteki
+bilgisayar) kullanır. Vercel'de `/api/ws` yoktur; ekran kendiliğinden SSE yedeğine geçer, her şey çalışmaya devam eder.
 
 **VPS (önerilen):** [`deploy/`](deploy/README.md) Docker Compose ile uygulama + Caddy (otomatik HTTPS) kurar:
 

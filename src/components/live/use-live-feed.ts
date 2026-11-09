@@ -10,6 +10,8 @@ const HISTORY_LENGTH = 120;
 const STALE_AFTER_MS = 6_000;
 
 export type FeedStatus = "connecting" | "live" | "degraded" | "offline";
+/** Canlı akışın taşıması: WebSocket (/api/ws) ya da Server-Sent Events (/api/stream). */
+export type Transport = "ws" | "sse";
 
 /** Bir araçta sürüş bitti (sürücü indi ya da değişti). Bitiş bayrağı ve yayın bandı bunu dinler. */
 export interface Departure {
@@ -53,6 +55,8 @@ export interface LiveFeed {
   samplesPerMinute: number;
   /** Her snapshot'ta bir artar; akış göstergesinin ritmi. */
   tick: number;
+  /** O an kullanılan taşıma (WebSocket açılamazsa tercih "ws" iken bile "sse" olur). */
+  transport: Transport;
 }
 
 const MAX_ARRIVALS = 20;
@@ -65,11 +69,15 @@ interface HistoryEntry {
 }
 
 /**
- * Canlı akışa WebSocket ile bağlanır (bkz. connectLive) ve her saniye gelen snapshot'ı tutar.
+ * Canlı akışa bağlanır (tercihe göre WebSocket ya da SSE, bkz. connectLive) ve her saniye gelen snapshot'ı tutar.
  * Bağlantı kendiliğinden yeniden kurulur; burada yalnızca durum izlenir ve snapshot uzun süre gelmezse ekrana
  * "bağlantı yok" yansıtılır.
  */
-export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<VehicleId, HeartRateSample[]> = {}): LiveFeed {
+export function useLiveFeed(
+  initial: LiveSnapshot,
+  initialHistory: Record<VehicleId, HeartRateSample[]> = {},
+  preferred: Transport = "ws",
+): LiveFeed {
   const [snapshot, setSnapshot] = useState(initial);
   const [status, setStatus] = useState<FeedStatus>("connecting");
   // Açılış izi sunucudan gelir; sonrası akıştan büyür. Ref ve state aynı tohumdan kurulur.
@@ -85,6 +93,7 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
   const latestGeneratedAtRef = useRef(initial.generatedAt);
   const [samplesPerMinute, setSamplesPerMinute] = useState(0);
   const [tick, setTick] = useState(0);
+  const [transport, setTransport] = useState<Transport>(preferred);
 
   useEffect(() => {
     lastMessageAt.current = Date.now();
@@ -114,7 +123,7 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
     };
     const onDisconnect = () => setStatus((s) => (s === "live" ? "connecting" : s));
 
-    const transport = connectLive(onSnapshot, onDisconnect);
+    const connection = connectLive(preferred, onSnapshot, onDisconnect, setTransport);
 
     const watchdog = setInterval(() => {
       if (Date.now() - lastMessageAt.current > STALE_AFTER_MS) setStatus("offline");
@@ -122,30 +131,49 @@ export function useLiveFeed(initial: LiveSnapshot, initialHistory: Record<Vehicl
 
     return () => {
       clearInterval(watchdog);
-      transport.close();
+      connection.close();
     };
-  }, []);
+  }, [preferred]); // mod değişince (M) eski bağlantı kapanır, yenisi kurulur
 
-  return { snapshot, history, status, arrivals, departures, samplesPerMinute, tick };
+  return { snapshot, history, status, arrivals, departures, samplesPerMinute, tick, transport };
 }
 
 /** WebSocket kopunca yeniden bağlanma beklemesi: 1 sn'den başlar, 5 sn'de sabitlenir. */
 const WS_RETRY_MIN_MS = 1_000;
 const WS_RETRY_MAX_MS = 5_000;
-/** El sıkışma bu sürede bitmezse bağlantı bırakılıp yeniden denenir (asılı kalan proxy, uyanan TV). */
-const WS_CONNECT_TIMEOUT_MS = 5_000;
+/** WebSocket bu sürede açılamazsa bu sunucuda yok sayılır ve SSE'ye geçilir (Vercel'de /api/ws yoktur). */
+const WS_CONNECT_TIMEOUT_MS = 3_000;
 
 /**
- * `/api/ws` WebSocket bağlantısı (server.mts). Koparsa ya da hiç açılamazsa (sunucu yeniden başladı, Wi-Fi gitti)
- * 1-5 sn aralıkla yeniden denenir; bu sürede ekran son bilinen değerlerle kalır.
+ * Canlı akış taşıması.
+ *   "ws":  `/api/ws` (WebSocket, server.mts). Hiç açılamazsa — örneğin Vercel'de, orada özel sunucu yoktur — bu
+ *          bağlantı boyunca `/api/stream` (SSE) kullanılır. Açılmış WebSocket koparsa 1-5 sn aralıkla yeniden denenir.
+ *   "sse": doğrudan `/api/stream`. EventSource kopan bağlantıyı kendisi yeniden kurar.
+ * `onTransport` o an gerçekten kullanılan taşımayı bildirir.
  */
-function connectLive(onSnapshot: (snapshot: LiveSnapshot) => void, onDisconnect: () => void): { close(): void } {
+function connectLive(
+  preferred: Transport,
+  onSnapshot: (snapshot: LiveSnapshot) => void,
+  onDisconnect: () => void,
+  onTransport: (transport: Transport) => void,
+): { close(): void } {
   let closed = false;
   let socket: WebSocket | null = null;
+  let source: EventSource | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let retryMs = WS_RETRY_MIN_MS;
+  let everOpened = false;
 
-  const open = () => {
+  const openSse = () => {
+    onTransport("sse");
+    source = new EventSource("/api/stream");
+    source.addEventListener("snapshot", (event) => onSnapshot(JSON.parse((event as MessageEvent<string>).data) as LiveSnapshot));
+    source.addEventListener("error", onDisconnect);
+  };
+
+  const openWebSocket = () => {
+    if (typeof WebSocket === "undefined") return openSse();
+    onTransport("ws");
     const url = new URL("/api/ws", window.location.href);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(url);
@@ -154,6 +182,7 @@ function connectLive(onSnapshot: (snapshot: LiveSnapshot) => void, onDisconnect:
 
     ws.addEventListener("open", () => {
       clearTimeout(connectTimer);
+      everOpened = true;
       retryMs = WS_RETRY_MIN_MS;
     });
     ws.addEventListener("message", (event) => {
@@ -165,19 +194,22 @@ function connectLive(onSnapshot: (snapshot: LiveSnapshot) => void, onDisconnect:
       clearTimeout(connectTimer);
       if (closed) return;
       socket = null;
+      if (!everOpened) return openSse(); // bu sunucuda WebSocket yok: SSE yedeği
       onDisconnect();
-      retryTimer = setTimeout(open, retryMs);
+      retryTimer = setTimeout(openWebSocket, retryMs);
       retryMs = Math.min(retryMs * 2, WS_RETRY_MAX_MS);
     });
   };
 
-  open();
+  if (preferred === "sse") openSse();
+  else openWebSocket();
 
   return {
     close() {
       closed = true;
       clearTimeout(retryTimer);
       socket?.close();
+      source?.close();
     },
   };
 }

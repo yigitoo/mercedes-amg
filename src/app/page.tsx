@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Canlı Nabız" };
 
-/** Canlı ekran. İlk görüntü sunucuda hazırlanır, sonrası /api/ws (WebSocket) ile saniyede bir güncellenir. */
+/** Canlı ekran. İlk görüntü sunucuda hazırlanır, sonrası /api/ws (WebSocket; yoksa /api/stream SSE) ile saniyede bir güncellenir. */
 export default async function LivePage() {
   const snapshot = await getLiveSnapshot(); // hata fırlatmaz: veritabanı yoksa son bilinen görüntü
   return <LiveWall initial={snapshot} initialHistory={await getRecentHistory(snapshot)} />;

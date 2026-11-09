@@ -237,7 +237,7 @@ cmd_db_reset() {
 # ============================================================================
 cmd_deploy() {
   have vercel || die "Vercel CLI yok: pnpm add -g vercel"
-  warn "Vercel'de WebSocket (/api/ws) çalışmaz: admin ve ingest çalışır, canlı ekran güncellenmez. Canlı ekran için: pnpm build && pnpm start (bkz. README › Dağıtım)"
+  info "Vercel'de WebSocket (/api/ws) yok: canlı ekran SSE yedeğiyle çalışır. WebSocket için: deploy/ (VPS)"
   if [ "${1:-}" = prod ]; then
     cmd_build
     confirm "Canlıya (production) dağıtılsın mı?" || { info "vazgeçildi"; return 0; }
