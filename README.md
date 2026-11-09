@@ -93,8 +93,9 @@ Durdurmak için `./mercedesctl down`.
 
 ## mercedesctl
 
-Projenin tek kontrol noktası. Çalışma dosyaları (pid, log) `node_modules/.cache/mercedesctl/` altında tutulur:
-proje içinde olsalardı Next'in dosya izleyicisi her log satırında sayfayı yeniden yüklerdi.
+Projenin tek kontrol noktası. Çalışma dosyaları (pid, log) proje dışında, `~/.cache/mercedesctl/mercedes-amg/`
+altında tutulur: proje içinde (node_modules dahil) olsalardı Turbopack'in dosya izleyicisi her log satırında
+canlı ekranı yeniden yüklerdi.
 
 | Komut | Ne yapar |
 | --- | --- |

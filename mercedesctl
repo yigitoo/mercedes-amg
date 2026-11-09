@@ -19,9 +19,9 @@ cd "$ROOT"
 CLI="./mercedesctl"
 PORT="${PORT:-3000}"
 URL="http://localhost:$PORT"
-# Çalışma dosyaları (pid, log) Next'in izlemediği yerde. Proje içinde olsalardı dosya izleyici her log
-# satırını kod değişikliği sanıp sayfayı sürekli yeniden yüklerdi.
-RUNDIR="$ROOT/node_modules/.cache/mercedesctl"
+# Çalışma dosyaları (pid, log) proje klasörünün dışında. Proje içinde (node_modules dahil) olsalardı
+# Turbopack'in dosya izleyicisi her log satırını değişiklik sanıp canlı ekranı sürekli yeniden yüklerdi.
+RUNDIR="${XDG_CACHE_HOME:-$HOME/.cache}/mercedesctl/$(basename "$ROOT")"
 LOGDIR="$RUNDIR/logs"
 SERVICES=(web sim desktop)
 
