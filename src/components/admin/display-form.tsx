@@ -10,8 +10,8 @@ import { FormMessage } from "@/components/ui/form-message";
 import { cn } from "@/lib/cn";
 
 const GAUGES: { value: GaugeStyle; title: string; description: string }[] = [
+  { value: "bar", title: "Devir barı (varsayılan)", description: "Büyük rakam, altında eğik şeritli bar." },
   { value: "dial", title: "Kadran", description: "Yuvarlak devir göstergesi, rakam ortada." },
-  { value: "bar", title: "Devir barı", description: "Büyük rakam, altında eğik şeritli bar." },
 ];
 
 /** Canlı ekran ayarları formu. Kaydedilince TV ekranı bir sonraki saniyede yeni ayarla çizilir. */

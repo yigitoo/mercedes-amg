@@ -109,7 +109,7 @@ export const DEFAULT_EVENT_SETTINGS: EventSettings = {
   subtitle: "Sürüş performansı, araç başına anlık",
   /** Olduğu gibi gösterilir (CSS büyük harfe çevirmez: tr dilinde "i" → "İ" olurdu). */
   tagline: "TOO HARD TO RESIST",
-  gauge: "dial",
+  gauge: "bar",
 };
 
 /** Denetim kaydı: admin panelde yapılan her değişiklik ve her giriş denemesi. */
